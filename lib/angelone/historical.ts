@@ -3,7 +3,7 @@ import { formatInTimeZone } from 'date-fns-tz'
 import { getSmartApi, withRetry } from './client'
 import { NetworkError, classifyAngelError } from './errors'
 
-export type CandleInterval = 'ONE_DAY' | 'ONE_WEEK'
+export type CandleInterval = 'ONE_DAY'
 
 export type CandleData = {
   timestamp: Date

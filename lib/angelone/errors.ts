@@ -29,7 +29,7 @@ export class NetworkError extends Error {
 }
 
 const RATE_LIMIT_ERROR_CODES = new Set(['AB1004'])
-const AUTH_ERROR_CODES = new Set(['AG8001', 'AB8050', 'AB1010'])
+const AUTH_ERROR_CODES = new Set(['AG8001', 'AG8002', 'AG8003', 'AB8050', 'AB8051', 'AB1010'])
 
 type ErrorLike = {
   status?: number

@@ -17,7 +17,7 @@ const dateLike = z.preprocess((v) => {
 
 const querySchema = z.object({
   exchange: z.enum(['NSE', 'BSE']),
-  interval: z.enum(['ONE_DAY', 'ONE_WEEK']),
+  interval: z.enum(['ONE_DAY']),
   from: dateLike,
   to: dateLike,
 })
