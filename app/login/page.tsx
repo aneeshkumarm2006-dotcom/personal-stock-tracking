@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState, type FormEvent } from 'react'
+import { Suspense, useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [passphrase, setPassphrase] = useState('')
@@ -57,32 +57,40 @@ export default function LoginPage() {
   }
 
   return (
+    <Card className="w-full max-w-sm">
+      <CardHeader>
+        <CardTitle>Stock Tracker</CardTitle>
+        <CardDescription>Enter your passphrase to continue.</CardDescription>
+      </CardHeader>
+      <form onSubmit={handleSubmit}>
+        <CardContent className="space-y-2">
+          <Label htmlFor="passphrase">Passphrase</Label>
+          <Input
+            id="passphrase"
+            type="password"
+            autoComplete="current-password"
+            value={passphrase}
+            onChange={(event) => setPassphrase(event.target.value)}
+            required
+            autoFocus
+          />
+        </CardContent>
+        <CardFooter>
+          <Button type="submit" disabled={submitting || !passphrase} className="w-full">
+            {submitting ? 'Signing in...' : 'Sign in'}
+          </Button>
+        </CardFooter>
+      </form>
+    </Card>
+  )
+}
+
+export default function LoginPage() {
+  return (
     <main className="flex min-h-full flex-1 items-center justify-center p-6">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Stock Tracker</CardTitle>
-          <CardDescription>Enter your passphrase to continue.</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-2">
-            <Label htmlFor="passphrase">Passphrase</Label>
-            <Input
-              id="passphrase"
-              type="password"
-              autoComplete="current-password"
-              value={passphrase}
-              onChange={(event) => setPassphrase(event.target.value)}
-              required
-              autoFocus
-            />
-          </CardContent>
-          <CardFooter>
-            <Button type="submit" disabled={submitting || !passphrase} className="w-full">
-              {submitting ? 'Signing in...' : 'Sign in'}
-            </Button>
-          </CardFooter>
-        </form>
-      </Card>
+      <Suspense>
+        <LoginForm />
+      </Suspense>
     </main>
   )
 }
