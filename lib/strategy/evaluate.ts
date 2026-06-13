@@ -79,21 +79,21 @@ export function exitMode(entry: {
   return 'single'
 }
 
-// The live protective stop for an entry given its current state. For a trailing
-// entry it ratchets up with the high-water mark but never below breakeven; for a
-// scaled-out remainder it sits at breakeven; otherwise it is the original SL.
+// The live protective stop for an entry given its current state. Once TP1 is
+// banked — whether the whole lot is trailing (single share) or only the
+// scaled-out remainder is left (multi-share) — the stop ratchets up with the
+// high-water mark but never below breakeven. Before TP1 it is the original SL.
 export function currentStop(entry: {
   entryPrice: number
   stopLoss: number
   status: StrategyEntryStatus
   peakPrice?: number | null
 }): number {
-  const risk = entry.entryPrice - entry.stopLoss
-  if (entry.status === 'trailing') {
+  if (entry.status === 'trailing' || entry.status === 'partial') {
+    const risk = entry.entryPrice - entry.stopLoss
     const peak = entry.peakPrice ?? entry.entryPrice
     return Math.max(entry.entryPrice, peak - risk)
   }
-  if (entry.status === 'partial') return entry.entryPrice
   return entry.stopLoss
 }
 
@@ -173,7 +173,7 @@ export async function evaluateEntries(
             entry.status = 'trailing'
             entry.events.push({ type: 'tp1_hit', price: ltp, timestamp: now })
           } else {
-            // Scale out: sell half now, ride the rest toward TP2.
+            // Scale out: sell half now, then trail the rest (TP2 caps it).
             const sold = Math.floor(entry.quantity / 2)
             entry.soldQuantity = sold
             entry.peakPrice = ltp
@@ -248,8 +248,16 @@ export async function evaluateEntries(
       }
 
       if (entry.status === 'partial') {
+        // The remainder behaves exactly like a single-share trail: drag the
+        // stop up behind new highs, never below breakeven, with TP2 as a cap.
         const remaining = entry.quantity - (entry.soldQuantity ?? 0)
+        let peakAdvanced = false
+        if (entry.peakPrice == null || ltp > entry.peakPrice) {
+          entry.peakPrice = ltp
+          peakAdvanced = true
+        }
 
+        // Hard exit at TP2 when one was given.
         if (entry.target2 != null && ltp >= entry.target2) {
           entry.soldQuantity = entry.quantity
           entry.status = 'tp_hit'
@@ -264,8 +272,8 @@ export async function evaluateEntries(
           continue
         }
 
-        // Breakeven stop protects the remainder once TP1 profit is banked.
-        if (ltp <= entry.entryPrice) {
+        const stop = currentStop(entry)
+        if (ltp <= stop) {
           entry.soldQuantity = entry.quantity
           entry.status = 'trail_hit'
           entry.events.push({
@@ -276,7 +284,11 @@ export async function evaluateEntries(
           })
           await entry.save()
           transitioned += 1
+          continue
         }
+
+        // No exit, but persist a new high so the trail survives restarts.
+        if (peakAdvanced) await entry.save()
         continue
       }
     } catch (err) {

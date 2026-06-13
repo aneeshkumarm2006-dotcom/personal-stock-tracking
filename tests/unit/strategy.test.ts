@@ -217,7 +217,31 @@ describe('evaluateEntries', () => {
     expect(entry.events.at(-1)?.quantity).toBe(2)
   })
 
-  it('scale mode: remainder stopped at breakeven after TP1', async () => {
+  it('scale mode: remainder trails up after TP1 and exits on pullback', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90, // risk = 10
+      targetPrice: 110,
+      target2: 200, // far away so the trail (not TP2) decides the exit
+      quantity: 4,
+      soldQuantity: 2,
+      peakPrice: 110,
+      status: 'partial',
+    })
+    // New high 130 -> stop = max(100, 130-10) = 120. LTP 130 stays in.
+    await evaluateEntries([entry], [snap('T1', 130)])
+    expect(entry.status).toBe('partial')
+    expect(entry.peakPrice).toBe(130)
+
+    // Pulls back to 119 (<= 120) -> remainder trailed out, full position closed.
+    await evaluateEntries([entry], [snap('T1', 119)])
+    expect(entry.status).toBe('trail_hit')
+    expect(entry.soldQuantity).toBe(4)
+    expect(entry.events.at(-1)?.quantity).toBe(2)
+  })
+
+  it('scale mode: remainder exits at breakeven if it never makes a new high', async () => {
     const entry = makeEntry({
       instrumentToken: 'T1',
       entryPrice: 100,
@@ -226,6 +250,7 @@ describe('evaluateEntries', () => {
       target2: 120,
       quantity: 4,
       soldQuantity: 2,
+      peakPrice: 110,
       status: 'partial',
     })
     await evaluateEntries([entry], [snap('T1', 100)])

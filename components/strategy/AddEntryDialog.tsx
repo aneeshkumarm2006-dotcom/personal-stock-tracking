@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ChangeEvent, type FocusEvent } from 'react'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
@@ -134,8 +134,8 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
         ? 'Single share: holds past TP1 on a trailing stop, and exits if TP2 is reached.'
         : 'Single share: holds past TP1 on a trailing stop (stop never drops below your entry).'
       : hasTarget2
-        ? `Sells ${Math.floor(quantity / 2)} of ${quantity} at TP1, the rest at TP2 (remainder protected at breakeven).`
-        : 'Sells the whole position at TP1. Add a TP2 to scale out and let half run.'
+        ? `Sells ${Math.floor(quantity / 2)} of ${quantity} at TP1, then trails the rest up (selling on a pullback, or at TP2 if reached).`
+        : 'Sells the whole position at TP1. Add a TP2 to sell half there and trail the rest.'
 
   const capitalUsed =
     Number.isFinite(entryPrice) && Number.isFinite(quantity)
@@ -172,6 +172,59 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
       form.setValue('instrumentSymbol', '', { shouldValidate: true })
     }
   }
+
+  type PriceField = 'stopLoss' | 'targetPrice' | 'target2'
+
+  // Lets the SL / TP1 / TP2 boxes accept a percentage (e.g. "10%") instead of a
+  // rupee price. It is converted off the entry price, in place, in the same box.
+  // SL sits below entry; targets sit above.
+  const resolvePriceOrPercent = (
+    field: PriceField,
+    direction: 'up' | 'down',
+    raw: string,
+  ) => {
+    const match = /^(\d*\.?\d+)\s*%$/.exec(raw.trim())
+    if (!match) return
+    const pct = Number(match[1])
+    const base = num(form.getValues('entryPrice'))
+    if (!Number.isFinite(base) || !Number.isFinite(pct)) return
+    const computed =
+      direction === 'down' ? base * (1 - pct / 100) : base * (1 + pct / 100)
+    form.setValue(field, String(Math.round(computed * 100) / 100), {
+      shouldValidate: true,
+      shouldDirty: true,
+    })
+  }
+
+  // Spread onto a price input: resolves a "%" value as soon as it is typed, and
+  // again on blur (covers pasted values).
+  const percentField = (field: PriceField, direction: 'up' | 'down') => {
+    const reg = form.register(field)
+    const maybeResolve = (value: string) => {
+      if (value.trim().endsWith('%')) resolvePriceOrPercent(field, direction, value)
+    }
+    return {
+      ...reg,
+      onChange: (e: ChangeEvent<HTMLInputElement>) => {
+        void reg.onChange(e)
+        maybeResolve(e.target.value)
+      },
+      onBlur: (e: FocusEvent<HTMLInputElement>) => {
+        void reg.onBlur(e)
+        maybeResolve(e.target.value)
+      },
+    }
+  }
+
+  // If a "%" was typed into a price box before entry was filled, redo the
+  // conversion once entry is known (or changes).
+  const reresolvePriceFields = () => {
+    resolvePriceOrPercent('stopLoss', 'down', String(form.getValues('stopLoss') ?? ''))
+    resolvePriceOrPercent('targetPrice', 'up', String(form.getValues('targetPrice') ?? ''))
+    resolvePriceOrPercent('target2', 'up', String(form.getValues('target2') ?? ''))
+  }
+
+  const entryReg = form.register('entryPrice')
 
   const onSubmit: SubmitHandler<ParsedValues> = async (values) => {
     if (values.entryPrice * values.quantity > capitalFree) {
@@ -250,7 +303,11 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
                 min={0}
                 step="0.01"
                 inputMode="decimal"
-                {...form.register('entryPrice')}
+                {...entryReg}
+                onBlur={(e) => {
+                  void entryReg.onBlur(e)
+                  reresolvePriceFields()
+                }}
               />
               {form.formState.errors.entryPrice && (
                 <p className="text-destructive text-xs">
@@ -278,14 +335,14 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="stop-loss">Stop loss (₹)</Label>
+              <Label htmlFor="stop-loss">Stop loss (₹ or %)</Label>
               <Input
                 id="stop-loss"
-                type="number"
-                min={0}
-                step="0.01"
+                type="text"
                 inputMode="decimal"
-                {...form.register('stopLoss')}
+                autoComplete="off"
+                placeholder="e.g. 4645 or 5%"
+                {...percentField('stopLoss', 'down')}
               />
               {form.formState.errors.stopLoss && (
                 <p className="text-destructive text-xs">
@@ -294,14 +351,14 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
               )}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="target-price">Target 1 / TP1 (₹)</Label>
+              <Label htmlFor="target-price">Target 1 / TP1 (₹ or %)</Label>
               <Input
                 id="target-price"
-                type="number"
-                min={0}
-                step="0.01"
+                type="text"
                 inputMode="decimal"
-                {...form.register('targetPrice')}
+                autoComplete="off"
+                placeholder="e.g. 4790 or 2%"
+                {...percentField('targetPrice', 'up')}
               />
               {form.formState.errors.targetPrice && (
                 <p className="text-destructive text-xs">
@@ -314,17 +371,16 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="target-2">
-                Target 2 / TP2 (₹){' '}
+                Target 2 / TP2 (₹ or %){' '}
                 <span className="text-muted-foreground font-normal">— optional</span>
               </Label>
               <Input
                 id="target-2"
-                type="number"
-                min={0}
-                step="0.01"
+                type="text"
                 inputMode="decimal"
-                placeholder="e.g. 4900"
-                {...form.register('target2')}
+                autoComplete="off"
+                placeholder="e.g. 4900 or 5%"
+                {...percentField('target2', 'up')}
               />
               {form.formState.errors.target2 && (
                 <p className="text-destructive text-xs">
@@ -333,6 +389,12 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
               )}
             </div>
           </div>
+
+          <p className="text-muted-foreground text-xs">
+            Tip: type a percentage like <span className="font-medium">5%</span> in
+            the stop / target boxes and it is converted from the entry price
+            automatically.
+          </p>
 
           {planText && (
             <p className="bg-muted/40 text-muted-foreground rounded-md border px-3 py-2 text-xs">
