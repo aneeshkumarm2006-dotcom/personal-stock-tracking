@@ -7,7 +7,11 @@ import { WatchlistItem } from '@/lib/db/models/WatchlistItem'
 import { getQuotes, type ExchangeTokens, type PriceSnapshotData } from '@/lib/angelone/quotes'
 import { AuthError, RateLimitError } from '@/lib/angelone/errors'
 import { getValidSession, invalidateSession } from '@/lib/angelone/session'
-import { evaluateEntries, type EvaluatableEntry } from '@/lib/strategy/evaluate'
+import {
+  evaluateEntries,
+  OPEN_ENTRY_STATUSES,
+  type EvaluatableEntry,
+} from '@/lib/strategy/evaluate'
 import {
   evaluateWatchlistAlerts,
   type WatchlistItemForEval,
@@ -51,7 +55,7 @@ export async function collectOpenHoldingTokens(): Promise<Set<string>> {
 
 export async function collectStrategyTokens(): Promise<Set<string>> {
   const docs = await StrategyEntry.find(
-    { status: { $in: ['pending', 'active'] } },
+    { status: { $in: [...OPEN_ENTRY_STATUSES] } },
     { instrumentToken: 1, _id: 0 },
   ).lean()
   const set = new Set<string>()
@@ -117,7 +121,7 @@ async function upsertSnapshots(snaps: PriceSnapshotData[]): Promise<void> {
 
 async function fetchEvaluatableEntries(): Promise<EvaluatableEntry[]> {
   const docs = await StrategyEntry.find({
-    status: { $in: ['pending', 'active'] },
+    status: { $in: [...OPEN_ENTRY_STATUSES] },
   })
   return docs as unknown as EvaluatableEntry[]
 }

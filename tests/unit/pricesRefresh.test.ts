@@ -53,6 +53,7 @@ vi.mock('@/lib/strategy/evaluate', () => ({
   evaluateEntries: vi
     .fn()
     .mockResolvedValue({ evaluated: 0, transitioned: 0 }),
+  OPEN_ENTRY_STATUSES: ['pending', 'active', 'partial', 'trailing'],
 }))
 
 // ----- Imports (after vi.mock so they pick up the mocks) ------------------

@@ -48,6 +48,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     entryPrice: parsed.data.entryPrice ?? existing.entryPrice,
     stopLoss: parsed.data.stopLoss ?? existing.stopLoss,
     targetPrice: parsed.data.targetPrice ?? existing.targetPrice,
+    target2: parsed.data.target2 ?? existing.target2 ?? null,
     quantity: parsed.data.quantity ?? existing.quantity,
   }
 
@@ -60,6 +61,12 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   if (merged.targetPrice <= merged.entryPrice) {
     return NextResponse.json(
       { error: 'targetPrice must be above entryPrice for a long entry' },
+      { status: 400 },
+    )
+  }
+  if (merged.target2 != null && merged.target2 <= merged.targetPrice) {
+    return NextResponse.json(
+      { error: 'target2 must be above target1 (TP1)' },
       { status: 400 },
     )
   }

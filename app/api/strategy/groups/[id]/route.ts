@@ -6,6 +6,7 @@ import { connectDB } from '@/lib/db/connect'
 import { StrategyEntry } from '@/lib/db/models/StrategyEntry'
 import { StrategyGroup } from '@/lib/db/models/StrategyGroup'
 import { computeGroupStats, type EntryForStats } from '@/lib/strategy/group'
+import { TERMINAL_ENTRY_STATUSES } from '@/lib/strategy/evaluate'
 import { loadSnapshotsForTokens } from '@/lib/prices/snapshots'
 
 export const dynamic = 'force-dynamic'
@@ -20,7 +21,7 @@ const updateGroupSchema = z.union([
   }),
 ])
 
-const TERMINAL_STATUSES = ['closed_manual', 'tp_hit', 'sl_hit'] as const
+const TERMINAL_STATUSES = [...TERMINAL_ENTRY_STATUSES]
 
 export async function GET(_request: Request, { params }: RouteContext) {
   await connectDB()

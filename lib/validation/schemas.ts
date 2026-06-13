@@ -71,7 +71,10 @@ const strategyEntryBaseSchema = z.object({
   instrumentSymbol: z.string().min(1),
   entryPrice: z.number().positive('entryPrice must be greater than zero'),
   stopLoss: z.number().positive('stopLoss must be greater than zero'),
+  // First target (TP1).
   targetPrice: z.number().positive('targetPrice must be greater than zero'),
+  // Optional second target (TP2). Must sit above TP1 when provided.
+  target2: z.number().positive('target2 must be greater than zero').optional(),
   quantity: positiveInt,
   direction: z.enum(['long']).default('long'),
 })
@@ -90,6 +93,13 @@ export const strategyEntrySchema = strategyEntryBaseSchema.superRefine(
         code: 'custom',
         path: ['targetPrice'],
         message: 'targetPrice must be above entryPrice for a long entry',
+      })
+    }
+    if (data.target2 != null && data.target2 <= data.targetPrice) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['target2'],
+        message: 'target2 must be above target1 (TP1)',
       })
     }
   },

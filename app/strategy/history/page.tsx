@@ -30,7 +30,11 @@ import {
   formatIstDate,
   pnlColorClass,
 } from '@/lib/format'
-import type { StrategyEntryStatus, StrategyEvent } from '@/lib/strategy/evaluate'
+import {
+  realizedPnL,
+  type StrategyEntryStatus,
+  type StrategyEvent,
+} from '@/lib/strategy/evaluate'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +55,7 @@ type EntryDoc = {
   entryPrice: number
   stopLoss: number
   targetPrice: number
+  target2?: number | null
   quantity: number
   status: StrategyEntryStatus
   events: StrategyEvent[]
@@ -64,6 +69,12 @@ function statusBadge(status: StrategyEntryStatus) {
           TP hit
         </Badge>
       )
+    case 'trail_hit':
+      return (
+        <Badge variant="outline" className="bg-gain/10 text-gain border-transparent">
+          Trail exit
+        </Badge>
+      )
     case 'sl_hit':
       return (
         <Badge variant="outline" className="bg-loss/10 text-loss border-transparent">
@@ -72,6 +83,10 @@ function statusBadge(status: StrategyEntryStatus) {
       )
     case 'closed_manual':
       return <Badge variant="outline">Closed</Badge>
+    case 'partial':
+      return <Badge variant="secondary">Scaled out</Badge>
+    case 'trailing':
+      return <Badge variant="secondary">Trailing</Badge>
     case 'active':
       return <Badge variant="secondary">Active</Badge>
     case 'pending':
@@ -81,34 +96,34 @@ function statusBadge(status: StrategyEntryStatus) {
   }
 }
 
+// The price of the final fill that closed the position (entries may exit in two
+// fills when scaled out; this is the last one).
 function entryExitPrice(entry: EntryDoc): number | null {
-  if (entry.status === 'tp_hit') {
-    const ev = [...entry.events].reverse().find((e) => e.type === 'tp_hit')
-    return ev?.price ?? entry.targetPrice
-  }
-  if (entry.status === 'sl_hit') {
-    const ev = [...entry.events].reverse().find((e) => e.type === 'sl_hit')
-    return ev?.price ?? entry.stopLoss
-  }
-  if (entry.status === 'closed_manual') {
-    const ev = [...entry.events].reverse().find((e) => e.type === 'closed_manual')
-    return ev?.price ?? null
-  }
-  return null
+  const exit = [...entry.events]
+    .reverse()
+    .find((e) => typeof e.quantity === 'number' && e.quantity > 0)
+  return exit?.price ?? null
 }
 
 function entryPnL(entry: EntryDoc): number | null {
-  const exit = entryExitPrice(entry)
-  if (exit === null) return null
-  return Math.round((exit - entry.entryPrice) * entry.quantity * 100) / 100
+  if (!entry.events.some((e) => typeof e.quantity === 'number' && e.quantity > 0)) {
+    return null
+  }
+  return realizedPnL(entry.entryPrice, entry.events)
 }
 
 function eventLabel(type: string): string {
   switch (type) {
     case 'entry_hit':
       return 'Entry hit'
+    case 'tp1_hit':
+      return 'TP1 hit — trailing started'
+    case 'tp1_partial':
+      return 'TP1 hit — sold 50%'
     case 'tp_hit':
       return 'Target hit'
+    case 'trail_hit':
+      return 'Trailing stop hit'
     case 'sl_hit':
       return 'Stop loss hit'
     case 'closed_manual':
@@ -167,10 +182,12 @@ export default async function StrategyHistoryPage() {
           {groupsRaw.map((g) => {
             const id = String(g._id)
             const entries = entriesByGroup.get(id) ?? []
-            const tpHits = entries.filter((e) => e.status === 'tp_hit').length
+            const wins = entries.filter(
+              (e) => e.status === 'tp_hit' || e.status === 'trail_hit',
+            ).length
             const slHits = entries.filter((e) => e.status === 'sl_hit').length
-            const decided = tpHits + slHits
-            const winRate = decided > 0 ? (tpHits / decided) * 100 : 0
+            const decided = wins + slHits
+            const winRate = decided > 0 ? (wins / decided) * 100 : 0
             const netResult = entries.reduce((acc, e) => {
               const pnl = entryPnL(e)
               return pnl === null ? acc : acc + pnl
@@ -235,9 +252,12 @@ export default async function StrategyHistoryPage() {
                                 {statusBadge(e.status)}
                                 <span className="text-muted-foreground text-xs tabular-nums">
                                   Entry {formatCurrency(e.entryPrice)} · SL{' '}
-                                  {formatCurrency(e.stopLoss)} · TP{' '}
-                                  {formatCurrency(e.targetPrice)} · Qty{' '}
-                                  {formatInt(e.quantity)}
+                                  {formatCurrency(e.stopLoss)} · TP1{' '}
+                                  {formatCurrency(e.targetPrice)}
+                                  {e.target2 != null
+                                    ? ` · TP2 ${formatCurrency(e.target2)}`
+                                    : ''}{' '}
+                                  · Qty {formatInt(e.quantity)}
                                 </span>
                               </span>
                               <span

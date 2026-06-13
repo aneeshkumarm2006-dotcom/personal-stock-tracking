@@ -23,6 +23,8 @@ function makeEntry(
 ): EvaluatableEntry {
   const entry: EvaluatableEntry = {
     direction: 'long',
+    quantity: 10,
+    soldQuantity: 0,
     events: [],
     save: vi.fn().mockResolvedValue(undefined),
     ...partial,
@@ -124,6 +126,125 @@ describe('evaluateEntries', () => {
     await evaluateEntries([entry], [snap('T1', 200)])
     expect(entry.status).toBe('tp_hit')
     expect(entry.save).not.toHaveBeenCalled()
+  })
+
+  it('single share (trail mode): TP1 starts trailing instead of selling', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      quantity: 1,
+      status: 'active',
+    })
+    await evaluateEntries([entry], [snap('T1', 110)])
+    expect(entry.status).toBe('trailing')
+    expect(entry.peakPrice).toBe(110)
+    expect(entry.soldQuantity).toBe(0)
+    expect(entry.events.at(-1)?.type).toBe('tp1_hit')
+  })
+
+  it('trailing: stop ratchets with the high, never below breakeven', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90, // risk = 10
+      targetPrice: 110,
+      quantity: 1,
+      status: 'trailing',
+      peakPrice: 110,
+    })
+    // New high 130 -> stop = max(100, 130-10) = 120. LTP 130 stays in.
+    await evaluateEntries([entry], [snap('T1', 130)])
+    expect(entry.status).toBe('trailing')
+    expect(entry.peakPrice).toBe(130)
+
+    // Pulls back to 119 (<= 120 stop) -> trailing stop hit, full exit.
+    await evaluateEntries([entry], [snap('T1', 119)])
+    expect(entry.status).toBe('trail_hit')
+    expect(entry.soldQuantity).toBe(1)
+    expect(entry.events.at(-1)?.type).toBe('trail_hit')
+    expect(entry.events.at(-1)?.quantity).toBe(1)
+  })
+
+  it('trailing with TP2: hard-exits at the second target', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      target2: 125,
+      quantity: 1,
+      status: 'trailing',
+      peakPrice: 110,
+    })
+    await evaluateEntries([entry], [snap('T1', 125)])
+    expect(entry.status).toBe('tp_hit')
+    expect(entry.soldQuantity).toBe(1)
+  })
+
+  it('scale mode: TP1 sells half and rides the rest to partial', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      target2: 120,
+      quantity: 4,
+      status: 'active',
+    })
+    await evaluateEntries([entry], [snap('T1', 110)])
+    expect(entry.status).toBe('partial')
+    expect(entry.soldQuantity).toBe(2)
+    expect(entry.events.at(-1)?.type).toBe('tp1_partial')
+    expect(entry.events.at(-1)?.quantity).toBe(2)
+  })
+
+  it('scale mode: partial exits remainder at TP2', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      target2: 120,
+      quantity: 4,
+      soldQuantity: 2,
+      status: 'partial',
+    })
+    await evaluateEntries([entry], [snap('T1', 120)])
+    expect(entry.status).toBe('tp_hit')
+    expect(entry.soldQuantity).toBe(4)
+    expect(entry.events.at(-1)?.quantity).toBe(2)
+  })
+
+  it('scale mode: remainder stopped at breakeven after TP1', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      target2: 120,
+      quantity: 4,
+      soldQuantity: 2,
+      status: 'partial',
+    })
+    await evaluateEntries([entry], [snap('T1', 100)])
+    expect(entry.status).toBe('trail_hit')
+    expect(entry.soldQuantity).toBe(4)
+  })
+
+  it('multi-share without TP2 fully exits at TP1', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      quantity: 4,
+      status: 'active',
+    })
+    await evaluateEntries([entry], [snap('T1', 110)])
+    expect(entry.status).toBe('tp_hit')
+    expect(entry.soldQuantity).toBe(4)
   })
 })
 

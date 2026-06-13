@@ -8,7 +8,16 @@ import { strategyEntrySchema } from '@/lib/validation/schemas'
 
 export const dynamic = 'force-dynamic'
 
-const VALID_STATUSES = ['pending', 'active', 'tp_hit', 'sl_hit', 'closed_manual'] as const
+const VALID_STATUSES = [
+  'pending',
+  'active',
+  'partial',
+  'trailing',
+  'tp_hit',
+  'sl_hit',
+  'trail_hit',
+  'closed_manual',
+] as const
 type EntryStatus = (typeof VALID_STATUSES)[number]
 
 function isEntryStatus(value: string): value is EntryStatus {

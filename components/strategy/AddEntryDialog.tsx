@@ -31,6 +31,11 @@ const numberInput = z.preprocess(
   z.number().positive('Must be greater than 0'),
 )
 
+const optionalNumberInput = z.preprocess(
+  (v) => (v === '' || v === null || v === undefined ? undefined : Number(v)),
+  z.number().positive('Must be greater than 0').optional(),
+)
+
 const formSchema = z
   .object({
     instrumentToken: z.string().min(1, 'Pick an instrument'),
@@ -38,6 +43,7 @@ const formSchema = z
     entryPrice: numberInput,
     stopLoss: numberInput,
     targetPrice: numberInput,
+    target2: optionalNumberInput,
     quantity: z.preprocess(
       (v) => (v === '' || v === null || v === undefined ? Number.NaN : Number(v)),
       z.number().int('Whole number only').positive('Must be greater than 0'),
@@ -56,6 +62,13 @@ const formSchema = z
         code: 'custom',
         path: ['targetPrice'],
         message: 'Must be above entry price',
+      })
+    }
+    if (data.target2 != null && data.target2 <= data.targetPrice) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['target2'],
+        message: 'Must be above Target 1',
       })
     }
   })
@@ -86,6 +99,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
       entryPrice: '',
       stopLoss: '',
       targetPrice: '',
+      target2: '',
       quantity: '',
     },
   })
@@ -98,6 +112,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
         entryPrice: '',
         stopLoss: '',
         targetPrice: '',
+        target2: '',
         quantity: '',
       })
     }
@@ -107,7 +122,20 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
   const entryPrice = num(watched.entryPrice)
   const stopLoss = num(watched.stopLoss)
   const targetPrice = num(watched.targetPrice)
+  const target2 = num(watched.target2)
   const quantity = num(watched.quantity)
+
+  const hasTarget2 = Number.isFinite(target2)
+  // Mirrors the auto-decision the evaluator makes (lib/strategy/evaluate.ts).
+  const planText = !Number.isFinite(quantity)
+    ? null
+    : quantity === 1
+      ? hasTarget2
+        ? 'Single share: holds past TP1 on a trailing stop, and exits if TP2 is reached.'
+        : 'Single share: holds past TP1 on a trailing stop (stop never drops below your entry).'
+      : hasTarget2
+        ? `Sells ${Math.floor(quantity / 2)} of ${quantity} at TP1, the rest at TP2 (remainder protected at breakeven).`
+        : 'Sells the whole position at TP1. Add a TP2 to scale out and let half run.'
 
   const capitalUsed =
     Number.isFinite(entryPrice) && Number.isFinite(quantity)
@@ -162,6 +190,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
           entryPrice: values.entryPrice,
           stopLoss: values.stopLoss,
           targetPrice: values.targetPrice,
+          ...(values.target2 != null ? { target2: values.target2 } : {}),
           quantity: values.quantity,
           direction: 'long',
         }),
@@ -265,7 +294,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
               )}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="target-price">Target price (₹)</Label>
+              <Label htmlFor="target-price">Target 1 / TP1 (₹)</Label>
               <Input
                 id="target-price"
                 type="number"
@@ -281,6 +310,36 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
               )}
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="target-2">
+                Target 2 / TP2 (₹){' '}
+                <span className="text-muted-foreground font-normal">— optional</span>
+              </Label>
+              <Input
+                id="target-2"
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                placeholder="e.g. 4900"
+                {...form.register('target2')}
+              />
+              {form.formState.errors.target2 && (
+                <p className="text-destructive text-xs">
+                  {form.formState.errors.target2.message}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {planText && (
+            <p className="bg-muted/40 text-muted-foreground rounded-md border px-3 py-2 text-xs">
+              <span className="text-foreground font-medium">What happens: </span>
+              {planText}
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3 text-xs sm:grid-cols-4">
             <div>
