@@ -107,3 +107,61 @@ export const manualCloseSchema = z.object({
 })
 
 export type ManualCloseInput = z.infer<typeof manualCloseSchema>
+
+// --- Watchlist ---
+
+const convictionEnum = z.enum(['watching', 'interested', 'high'])
+const exchangeEnum = z.enum(['NSE', 'BSE'])
+const alertDirectionEnum = z.enum(['below', 'above'])
+const alertStatusEnum = z.enum(['armed', 'triggered', 'snoozed', 'disabled'])
+
+export const watchlistItemSchema = z.object({
+  instrumentToken: z.string().min(1),
+  instrumentSymbol: z.string().min(1),
+  exchange: exchangeEnum.default('NSE'),
+  name: z.string().optional(),
+  tags: z.array(z.string()).max(50, 'too many tags').default([]),
+  notes: z.string().max(2000).optional(),
+  targetBuyPrice: z
+    .number()
+    .positive('targetBuyPrice must be greater than zero')
+    .optional(),
+  priceWhenAdded: z.number().positive().optional(),
+  conviction: convictionEnum.default('watching'),
+})
+
+export type WatchlistItemInput = z.infer<typeof watchlistItemSchema>
+
+// Partial edit of an item's metadata (not tags/alerts — those have their own
+// routes). `targetBuyPrice` is nullable so the edit form can clear the target.
+export const watchlistItemUpdateSchema = z
+  .object({
+    instrumentSymbol: z.string().min(1),
+    exchange: exchangeEnum,
+    name: z.string(),
+    notes: z.string().max(2000),
+    targetBuyPrice: z
+      .number()
+      .positive('targetBuyPrice must be greater than zero')
+      .nullable(),
+    conviction: convictionEnum,
+  })
+  .partial()
+
+export type WatchlistItemUpdateInput = z.infer<typeof watchlistItemUpdateSchema>
+
+// Create or fully edit one alert. `status` is optional on create (the model
+// defaults to 'armed').
+export const priceAlertSchema = z.object({
+  targetPrice: z.number().positive('targetPrice must be greater than zero'),
+  direction: alertDirectionEnum.default('below'),
+  note: z.string().max(500).optional(),
+  status: alertStatusEnum.optional(),
+})
+
+export type PriceAlertInput = z.infer<typeof priceAlertSchema>
+
+// Snooze / disable / re-arm or partial edit: a body of just { status } is valid.
+export const priceAlertUpdateSchema = priceAlertSchema.partial()
+
+export type PriceAlertUpdateInput = z.infer<typeof priceAlertUpdateSchema>

@@ -26,6 +26,18 @@ vi.mock('@/lib/db/models/Transaction', () => ({
   Transaction: { aggregate: vi.fn() },
 }))
 
+vi.mock('@/lib/db/models/WatchlistItem', () => ({
+  WatchlistItem: { find: vi.fn() },
+}))
+
+vi.mock('@/lib/watchlist/evaluate', () => ({
+  evaluateWatchlistAlerts: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/lib/email/mailer', () => ({
+  sendWatchlistAlertEmail: vi.fn().mockResolvedValue({ sent: true }),
+}))
+
 vi.mock('@/lib/angelone/quotes', () => ({
   getQuotes: vi.fn(),
 }))
@@ -49,6 +61,7 @@ import { Instrument } from '@/lib/db/models/Instrument'
 import { PriceSnapshot } from '@/lib/db/models/PriceSnapshot'
 import { StrategyEntry } from '@/lib/db/models/StrategyEntry'
 import { Transaction } from '@/lib/db/models/Transaction'
+import { WatchlistItem } from '@/lib/db/models/WatchlistItem'
 import { getQuotes } from '@/lib/angelone/quotes'
 import { getValidSession, invalidateSession } from '@/lib/angelone/session'
 import { evaluateEntries } from '@/lib/strategy/evaluate'
@@ -62,6 +75,7 @@ type InstrumentRow = { token: string; exchange: string }
 const aggregateMock = Transaction.aggregate as unknown as ReturnType<typeof vi.fn>
 const strategyFindMock = StrategyEntry.find as unknown as ReturnType<typeof vi.fn>
 const instrumentFindMock = Instrument.find as unknown as ReturnType<typeof vi.fn>
+const watchlistFindMock = WatchlistItem.find as unknown as ReturnType<typeof vi.fn>
 const bulkWriteMock = PriceSnapshot.bulkWrite as unknown as ReturnType<typeof vi.fn>
 const invalidateSessionMock = invalidateSession as unknown as ReturnType<typeof vi.fn>
 const getQuotesMock = getQuotes as unknown as ReturnType<typeof vi.fn>
@@ -101,6 +115,11 @@ beforeEach(() => {
   invalidateSessionMock.mockResolvedValue(undefined)
   getValidSessionMock.mockResolvedValue({ jwtToken: 'jwt', feedToken: 'feed' })
   evaluateMock.mockResolvedValue({ evaluated: 0, transitioned: 0 })
+  // No watchlist alerts by default: token-collection (projected, .lean()) and
+  // the hydrated fetch (awaited directly) both return empty.
+  watchlistFindMock.mockImplementation((_filter: unknown, projection?: unknown) =>
+    projection ? leanReturn([]) : Promise.resolve([]),
+  )
 })
 
 // ----- Tests --------------------------------------------------------------

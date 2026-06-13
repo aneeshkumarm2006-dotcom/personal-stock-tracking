@@ -1,6 +1,9 @@
 import { HoldingTags } from '@/lib/db/models/HoldingTags'
+import { WatchlistItem } from '@/lib/db/models/WatchlistItem'
 
 export const MAX_TAGS_PER_HOLDING = 20
+// Clarity alias: tags now apply to both holdings and watchlist items.
+export const MAX_TAGS_PER_ITEM = MAX_TAGS_PER_HOLDING
 export const MAX_TAG_LENGTH = 40
 
 // Normalize a raw tag list: trim, collapse internal whitespace, drop empties,
@@ -38,12 +41,16 @@ export async function loadTagsForTokens(
 }
 
 // The distinct catalog of every tag in use, sorted case-insensitively.
-// Powers tag suggestions/autocomplete in the editor.
+// Powers tag suggestions/autocomplete in the editor. Unions tags from BOTH
+// holdings and watchlist items so the two tabs share one vocabulary.
 export async function getAllTags(): Promise<string[]> {
-  const docs = await HoldingTags.find({}, { tags: 1 }).lean()
+  const [holdingDocs, watchlistDocs] = await Promise.all([
+    HoldingTags.find({}, { tags: 1 }).lean(),
+    WatchlistItem.find({}, { tags: 1 }).lean(),
+  ])
   const seen = new Set<string>()
   const result: string[] = []
-  for (const d of docs) {
+  for (const d of [...holdingDocs, ...watchlistDocs]) {
     for (const tag of d.tags ?? []) {
       const key = tag.toLowerCase()
       if (seen.has(key)) continue

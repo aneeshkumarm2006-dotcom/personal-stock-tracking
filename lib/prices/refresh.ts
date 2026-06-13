@@ -3,10 +3,16 @@ import { Instrument } from '@/lib/db/models/Instrument'
 import { PriceSnapshot } from '@/lib/db/models/PriceSnapshot'
 import { StrategyEntry } from '@/lib/db/models/StrategyEntry'
 import { Transaction } from '@/lib/db/models/Transaction'
+import { WatchlistItem } from '@/lib/db/models/WatchlistItem'
 import { getQuotes, type ExchangeTokens, type PriceSnapshotData } from '@/lib/angelone/quotes'
 import { AuthError, RateLimitError } from '@/lib/angelone/errors'
 import { getValidSession, invalidateSession } from '@/lib/angelone/session'
 import { evaluateEntries, type EvaluatableEntry } from '@/lib/strategy/evaluate'
+import {
+  evaluateWatchlistAlerts,
+  type WatchlistItemForEval,
+} from '@/lib/watchlist/evaluate'
+import { sendWatchlistAlertEmail } from '@/lib/email/mailer'
 
 export type RefreshSkipReason = 'no tokens' | 'rate_limited' | 'error'
 
@@ -22,10 +28,11 @@ export type RefreshResult =
       fetched: number
       evaluated: number
       transitioned: number
+      alertsTriggered: number
       durationMs: number
     }
 
-async function collectOpenHoldingTokens(): Promise<Set<string>> {
+export async function collectOpenHoldingTokens(): Promise<Set<string>> {
   const rows = await Transaction.aggregate<{ _id: string; netQty: number }>([
     {
       $group: {
@@ -42,7 +49,7 @@ async function collectOpenHoldingTokens(): Promise<Set<string>> {
   return new Set(rows.map((r) => r._id))
 }
 
-async function collectStrategyTokens(): Promise<Set<string>> {
+export async function collectStrategyTokens(): Promise<Set<string>> {
   const docs = await StrategyEntry.find(
     { status: { $in: ['pending', 'active'] } },
     { instrumentToken: 1, _id: 0 },
@@ -52,6 +59,26 @@ async function collectStrategyTokens(): Promise<Set<string>> {
     if (d.instrumentToken) set.add(d.instrumentToken)
   }
   return set
+}
+
+// Only watchlist items with at least one ARMED alert need a live price (saves
+// quota); items with no active alert can be priced lazily on page open.
+async function collectWatchlistAlertTokens(): Promise<Set<string>> {
+  const docs = await WatchlistItem.find(
+    { 'alerts.status': 'armed' },
+    { instrumentToken: 1, _id: 0 },
+  ).lean()
+  const set = new Set<string>()
+  for (const d of docs) {
+    if (d.instrumentToken) set.add(d.instrumentToken)
+  }
+  return set
+}
+
+// Hydrated docs (need .save()) for the alert evaluator.
+async function fetchAlertableWatchlistItems(): Promise<WatchlistItemForEval[]> {
+  const docs = await WatchlistItem.find({ 'alerts.status': 'armed' })
+  return docs as unknown as WatchlistItemForEval[]
 }
 
 async function groupTokensByExchange(tokens: Set<string>): Promise<ExchangeTokens> {
@@ -113,11 +140,16 @@ export async function runRefreshCycle(): Promise<RefreshResult> {
   const startedAt = Date.now()
   await connectDB()
 
-  const [holdingTokens, strategyTokens] = await Promise.all([
+  const [holdingTokens, strategyTokens, watchlistTokens] = await Promise.all([
     collectOpenHoldingTokens(),
     collectStrategyTokens(),
+    collectWatchlistAlertTokens(),
   ])
-  const union = new Set<string>([...holdingTokens, ...strategyTokens])
+  const union = new Set<string>([
+    ...holdingTokens,
+    ...strategyTokens,
+    ...watchlistTokens,
+  ])
 
   if (union.size === 0) {
     return {
@@ -128,12 +160,25 @@ export async function runRefreshCycle(): Promise<RefreshResult> {
   }
 
   const grouped = await groupTokensByExchange(union)
-  if ((grouped.NSE?.length ?? 0) + (grouped.BSE?.length ?? 0) === 0) {
+  const totalTokens = (grouped.NSE?.length ?? 0) + (grouped.BSE?.length ?? 0)
+  if (totalTokens === 0) {
     return {
       skipped: true,
       reason: 'no tokens',
       durationMs: Date.now() - startedAt,
     }
+  }
+  // Angel One quotes accept up to 50 tokens per request. A personal account
+  // stays well under this; warn (don't fail) if it ever approaches the cap so
+  // the fetch layer can be taught to chunk before quotes start dropping.
+  if (totalTokens > 50) {
+    console.log(
+      JSON.stringify({
+        event: 'prices.refresh',
+        status: 'token-cap-warning',
+        total: totalTokens,
+      }),
+    )
   }
 
   let snapshots: PriceSnapshotData[]
@@ -172,11 +217,33 @@ export async function runRefreshCycle(): Promise<RefreshResult> {
     const entries = await fetchEvaluatableEntries()
     const outcome = await evaluateEntries(entries, snapshots)
 
+    // Watchlist price-alerts ride the same fresh snapshot batch. The alert is
+    // persisted as `triggered` before its email is attempted, so at-most-once
+    // holds even if the email fails. Each send is guarded so one failure
+    // doesn't block the others or abort the cycle.
+    const watchItems = await fetchAlertableWatchlistItems()
+    const triggered = await evaluateWatchlistAlerts(watchItems, snapshots)
+    for (const t of triggered) {
+      try {
+        await sendWatchlistAlertEmail(t)
+      } catch (mailErr) {
+        console.log(
+          JSON.stringify({
+            event: 'watchlist.alert.email',
+            status: 'error',
+            message:
+              mailErr instanceof Error ? mailErr.message : String(mailErr),
+          }),
+        )
+      }
+    }
+
     return {
       skipped: false,
       fetched: snapshots.length,
       evaluated: outcome.evaluated,
       transitioned: outcome.transitioned,
+      alertsTriggered: triggered.length,
       durationMs: Date.now() - startedAt,
     }
   } catch (err) {
