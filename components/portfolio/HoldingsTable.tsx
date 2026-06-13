@@ -15,9 +15,12 @@ import { EmptyState, ErrorState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency, formatInt, formatIstTime, formatPercent, pnlColorClass } from '@/lib/format'
 import type { EnrichedHolding } from '@/lib/portfolio/summary'
+import { HoldingTagsEditor } from './HoldingTagsEditor'
+
+type HoldingWithTags = EnrichedHolding & { tags?: string[] }
 
 type HoldingsResponse = {
-  holdings: EnrichedHolding[]
+  holdings: HoldingWithTags[]
   oldestFetchedAt: string | null
 }
 
@@ -66,6 +69,7 @@ export function HoldingsTable({ initialData }: HoldingsTableProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Symbol</TableHead>
+              <TableHead>Tags</TableHead>
               <TableHead className="text-right">Qty</TableHead>
               <TableHead className="text-right">Avg Buy Price</TableHead>
               <TableHead className="text-right">Invested</TableHead>
@@ -86,6 +90,13 @@ export function HoldingsTable({ initialData }: HoldingsTableProps) {
                   >
                     {h.instrumentSymbol || h.instrumentToken}
                   </Link>
+                </TableCell>
+                <TableCell>
+                  <HoldingTagsEditor
+                    instrumentToken={h.instrumentToken}
+                    instrumentSymbol={h.instrumentSymbol || h.instrumentToken}
+                    tags={h.tags ?? []}
+                  />
                 </TableCell>
                 <TableCell className="text-right">{formatInt(h.netQty)}</TableCell>
                 <TableCell className="text-right">{formatCurrency(h.avgBuyPrice)}</TableCell>

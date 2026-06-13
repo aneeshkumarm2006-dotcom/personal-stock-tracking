@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { connectDB } from '@/lib/db/connect'
 import { Transaction } from '@/lib/db/models/Transaction'
 import { computeHoldings, type TransactionForHoldings } from '@/lib/portfolio/holdings'
+import { loadTagsForTokens } from '@/lib/portfolio/tags'
 import { enrichHoldings } from '@/lib/portfolio/summary'
 import { loadSnapshotsForTokens } from '@/lib/prices/snapshots'
 
@@ -17,8 +18,14 @@ export async function GET() {
 
   const holdings = computeHoldings(transactions)
   const tokens = holdings.map((h) => h.instrumentToken)
-  const snapshots = await loadSnapshotsForTokens(tokens)
-  const enriched = enrichHoldings(holdings, snapshots)
+  const [snapshots, tagsByToken] = await Promise.all([
+    loadSnapshotsForTokens(tokens),
+    loadTagsForTokens(tokens),
+  ])
+  const enriched = enrichHoldings(holdings, snapshots).map((h) => ({
+    ...h,
+    tags: tagsByToken.get(h.instrumentToken) ?? [],
+  }))
 
   let oldestFetchedAt: Date | null = null
   for (const h of enriched) {

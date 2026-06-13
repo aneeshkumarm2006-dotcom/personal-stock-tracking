@@ -45,6 +45,19 @@ export const transactionSchema = z.object({
 
 export type TransactionInput = z.infer<typeof transactionSchema>
 
+export const cashAccountSchema = z.object({
+  fundsAdded: z.number().min(0, 'funds added must be zero or more'),
+})
+
+export type CashAccountInput = z.infer<typeof cashAccountSchema>
+
+export const holdingTagsSchema = z.object({
+  instrumentSymbol: z.string().optional(),
+  tags: z.array(z.string()).max(50, 'too many tags'),
+})
+
+export type HoldingTagsInput = z.infer<typeof holdingTagsSchema>
+
 export const strategyGroupSchema = z.object({
   name: z.string().min(1, 'name is required'),
   allocatedCapital: z.number().positive('allocatedCapital must be greater than zero'),

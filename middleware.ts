@@ -9,6 +9,8 @@ function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true
   if (PUBLIC_API_PATHS.has(pathname)) return true
   if (pathname.startsWith('/api/jobs/')) return true
+  // Research agent feed: protected by its own bearer token, not the session cookie.
+  if (pathname.startsWith('/api/research/')) return true
   return false
 }
 
