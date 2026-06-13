@@ -296,7 +296,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="entry-price">Entry price (₹)</Label>
+              <Label htmlFor="entry-price">Entry price</Label>
               <Input
                 id="entry-price"
                 type="number"
@@ -335,13 +335,12 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="stop-loss">Stop loss (₹ or %)</Label>
+              <Label htmlFor="stop-loss">Stop loss</Label>
               <Input
                 id="stop-loss"
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
-                placeholder="e.g. 4645 or 5%"
                 {...percentField('stopLoss', 'down')}
               />
               {form.formState.errors.stopLoss && (
@@ -351,13 +350,12 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
               )}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="target-price">Target 1 / TP1 (₹ or %)</Label>
+              <Label htmlFor="target-price">Target 1 / TP1</Label>
               <Input
                 id="target-price"
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
-                placeholder="e.g. 4790 or 2%"
                 {...percentField('targetPrice', 'up')}
               />
               {form.formState.errors.targetPrice && (
@@ -371,7 +369,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="target-2">
-                Target 2 / TP2 (₹ or %){' '}
+                Target 2 / TP2 {' '}
                 <span className="text-muted-foreground font-normal">— optional</span>
               </Label>
               <Input
@@ -379,7 +377,6 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
-                placeholder="e.g. 4900 or 5%"
                 {...percentField('target2', 'up')}
               />
               {form.formState.errors.target2 && (
@@ -389,12 +386,6 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
               )}
             </div>
           </div>
-
-          <p className="text-muted-foreground text-xs">
-            Tip: type a percentage like <span className="font-medium">5%</span> in
-            the stop / target boxes and it is converted from the entry price
-            automatically.
-          </p>
 
           {planText && (
             <p className="bg-muted/40 text-muted-foreground rounded-md border px-3 py-2 text-xs">
