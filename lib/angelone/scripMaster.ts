@@ -112,7 +112,17 @@ export async function refreshScripMaster(): Promise<number> {
       const exchange = pickExchange(row.exch_seg)
       if (!exchange) return false
       if (!row.token || !row.symbol) return false
-      return row.symbol.endsWith('-EQ')
+      // Cash-segment equities only: derivatives carry an instrumenttype
+      // (FUTSTK, OPTSTK, ...); cash equities leave it blank.
+      if (row.instrumenttype) return false
+      if (exchange === 'NSE') {
+        // NSE suffixes the series: EQ (rolling), BE/BZ (trade-to-trade),
+        // SM/ST (SME). All are tradeable equities; only -EQ was kept before,
+        // which silently dropped BE-series stocks like PREMIERPOL-BE.
+        return /-(EQ|BE|BZ|SM|ST)$/.test(row.symbol)
+      }
+      // BSE equities carry the bare symbol with no series suffix.
+      return !row.symbol.includes('-')
     })
     .map((row) => {
       const exchange = pickExchange(row.exch_seg) as Exchange

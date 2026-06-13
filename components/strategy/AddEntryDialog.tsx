@@ -20,6 +20,13 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { formatCurrency } from '@/lib/format'
 import {
   InstrumentTypeahead,
@@ -48,6 +55,7 @@ const formSchema = z
       (v) => (v === '' || v === null || v === undefined ? Number.NaN : Number(v)),
       z.number().int('Whole number only').positive('Must be greater than 0'),
     ),
+    triggerType: z.enum(['auto', 'limit', 'stop']).default('auto'),
   })
   .superRefine((data, ctx) => {
     if (data.stopLoss >= data.entryPrice) {
@@ -101,6 +109,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
       targetPrice: '',
       target2: '',
       quantity: '',
+      triggerType: 'auto',
     },
   })
 
@@ -118,12 +127,66 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
     }
   }, [open, form])
 
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null)
+
   const watched = form.watch()
   const entryPrice = num(watched.entryPrice)
   const stopLoss = num(watched.stopLoss)
   const targetPrice = num(watched.targetPrice)
   const target2 = num(watched.target2)
   const quantity = num(watched.quantity)
+  const triggerChoice = watched.triggerType ?? 'auto'
+
+  const instrumentToken = watched.instrumentToken
+
+  // Pull the last known price for the selected instrument so the user can see
+  // which side of the market their entry sits on (and so the auto trigger can
+  // be previewed). Best-effort: a token with no snapshot just shows nothing.
+  useEffect(() => {
+    if (!instrumentToken) {
+      setCurrentPrice(null)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/prices?tokens=${encodeURIComponent(instrumentToken)}`,
+          { credentials: 'include' },
+        )
+        if (!res.ok) return
+        const rows = (await res.json()) as { ltp?: number }[]
+        const ltp = rows[0]?.ltp
+        if (!cancelled) {
+          setCurrentPrice(typeof ltp === 'number' ? ltp : null)
+        }
+      } catch {
+        if (!cancelled) setCurrentPrice(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [instrumentToken])
+
+  // The concrete fill rule, mirroring resolveTriggerType on the server.
+  const resolvedTrigger: 'limit' | 'stop' =
+    triggerChoice === 'limit' || triggerChoice === 'stop'
+      ? triggerChoice
+      : currentPrice !== null && Number.isFinite(entryPrice)
+        ? entryPrice >= currentPrice
+          ? 'stop'
+          : 'limit'
+        : 'limit'
+
+  // Warn when the entry would fill the instant it's saved (mirrors the server
+  // guard) so the user can fix it before the request is rejected.
+  const wouldTriggerNow =
+    currentPrice !== null && Number.isFinite(entryPrice)
+      ? resolvedTrigger === 'stop'
+        ? currentPrice >= entryPrice
+        : currentPrice <= entryPrice
+      : false
 
   const hasTarget2 = Number.isFinite(target2)
   // Mirrors the auto-decision the evaluator makes (lib/strategy/evaluate.ts).
@@ -246,6 +309,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
           ...(values.target2 != null ? { target2: values.target2 } : {}),
           quantity: values.quantity,
           direction: 'long',
+          triggerType: values.triggerType ?? 'auto',
         }),
       })
       if (!res.ok) {
@@ -387,6 +451,50 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <Label htmlFor="trigger-type">Fill when</Label>
+            <Select
+              value={triggerChoice}
+              onValueChange={(v) =>
+                form.setValue('triggerType', (v ?? 'auto') as FormValues['triggerType'], {
+                  shouldValidate: true,
+                })
+              }
+            >
+              <SelectTrigger id="trigger-type" aria-label="Fill when">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto (decide from current price)</SelectItem>
+                <SelectItem value="stop">Breakout — price rises to entry</SelectItem>
+                <SelectItem value="limit">Dip — price falls to entry</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              {currentPrice !== null ? (
+                <>
+                  Current price {formatCurrency(currentPrice)}.{' '}
+                  {Number.isFinite(entryPrice) && (
+                    <>
+                      This fills when price{' '}
+                      {resolvedTrigger === 'stop' ? 'rises to' : 'falls to'}{' '}
+                      {formatCurrency(entryPrice)}.
+                    </>
+                  )}
+                </>
+              ) : (
+                'Current price unavailable — pick Breakout or Dip if Auto guesses wrong.'
+              )}
+            </p>
+          </div>
+
+          {wouldTriggerNow && (
+            <p className="text-destructive text-xs">
+              This entry would fill immediately at the current price. Adjust the
+              entry price or change “Fill when”.
+            </p>
+          )}
+
           {planText && (
             <p className="bg-muted/40 text-muted-foreground rounded-md border px-3 py-2 text-xs">
               <span className="text-foreground font-medium">What happens: </span>
@@ -429,7 +537,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
             </DialogClose>
             <Button
               type="submit"
-              disabled={form.formState.isSubmitting || overAllocated}
+              disabled={form.formState.isSubmitting || overAllocated || wouldTriggerNow}
             >
               {form.formState.isSubmitting ? 'Adding…' : 'Add entry'}
             </Button>

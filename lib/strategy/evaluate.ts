@@ -44,6 +44,14 @@ export const TERMINAL_ENTRY_STATUSES = [
   'closed_manual',
 ] as const
 
+// How a pending long entry arms its fill:
+//   - 'limit' (buy the dip): fills when price falls to or through the entry.
+//   - 'stop'  (breakout):    fills when price rises to or through the entry.
+// 'auto' is a request-time value only — the API resolves it to one of the two
+// concrete types (off the reference price) before persisting.
+export type TriggerType = 'limit' | 'stop'
+export type RequestedTriggerType = TriggerType | 'auto'
+
 export interface EvaluatableEntry {
   instrumentToken: string
   entryPrice: number
@@ -54,9 +62,38 @@ export interface EvaluatableEntry {
   soldQuantity?: number
   peakPrice?: number | null
   direction?: 'long'
+  triggerType?: TriggerType
   status: StrategyEntryStatus
   events: StrategyEvent[]
   save: () => Promise<unknown>
+}
+
+// Whether a pending entry's fill condition is met at the given price. A 'stop'
+// (breakout) entry fills on the way up; a 'limit' (dip) entry fills on the way
+// down. Missing triggerType is treated as 'limit' for backward compatibility.
+export function entryTriggered(
+  triggerType: TriggerType | undefined,
+  entryPrice: number,
+  ltp: number,
+): boolean {
+  return triggerType === 'stop' ? ltp >= entryPrice : ltp <= entryPrice
+}
+
+// Resolve a requested trigger type into a concrete one. An explicit choice is
+// honoured as-is; 'auto' (or absent) is decided off the reference price — an
+// entry at or above the current price is a breakout ('stop'), otherwise a dip
+// buy ('limit'). With no reference price available it falls back to 'limit',
+// matching the original behaviour.
+export function resolveTriggerType(
+  requested: RequestedTriggerType | undefined,
+  entryPrice: number,
+  referencePrice: number | null | undefined,
+): TriggerType {
+  if (requested === 'limit' || requested === 'stop') return requested
+  if (referencePrice != null && Number.isFinite(referencePrice)) {
+    return entryPrice >= referencePrice ? 'stop' : 'limit'
+  }
+  return 'limit'
 }
 
 export type ExitMode = 'trail' | 'scale' | 'single'
@@ -144,7 +181,7 @@ export async function evaluateEntries(
     // unsaved transition is retried on the next refresh cycle.
     try {
       if (entry.status === 'pending') {
-        if (ltp <= entry.entryPrice) {
+        if (entryTriggered(entry.triggerType, entry.entryPrice, ltp)) {
           entry.status = 'active'
           entry.events.push({ type: 'entry_hit', price: ltp, timestamp: now })
           await entry.save()

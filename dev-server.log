@@ -1,0 +1,106 @@
+$ next dev
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.2.0.2:3000
+- Environments: .env.local
+✓ Ready in 1581ms
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+
+⨯ MongooseServerSelectionError: Could not connect to any servers in your MongoDB Atlas cluster. One common reason is that you're trying to access the database from an IP that isn't whitelisted. Make sure your current IP address is on your Atlas cluster's IP whitelist: https://www.mongodb.com/docs/atlas/security-whitelist/
+    at async connectDB (lib\db\connect.ts:36:18)
+    at async refreshScripMaster (lib\angelone\scripMaster.ts:88:3)
+    at async GET (app\api\jobs\scrip-master\route.ts:15:20)
+  34 |
+  35 |   try {
+> 36 |     cache.conn = await cache.promise
+     |                  ^
+  37 |   } catch (err) {
+  38 |     cache.promise = null
+  39 |     throw err {
+  errorLabelSet: Set(0) {},
+  reason: TopologyDescription {
+    type: 'ReplicaSetNoPrimary',
+    servers: Map(3) {
+      'ac-f9n2aqc-shard-00-00.mlc5jio.mongodb.net:27017' => [ServerDescription],
+      'ac-f9n2aqc-shard-00-01.mlc5jio.mongodb.net:27017' => [ServerDescription],
+      'ac-f9n2aqc-shard-00-02.mlc5jio.mongodb.net:27017' => [ServerDescription]
+    },
+    stale: false,
+    compatible: true,
+    heartbeatFrequencyMS: 10000,
+    localThresholdMS: 15,
+    setName: 'atlas-tcn4i5-shard-0',
+    maxElectionId: null,
+    maxSetVersion: null,
+    commonWireVersion: 0,
+    logicalSessionTimeoutMinutes: null
+  },
+  code: undefined,
+  [cause]: TopologyDescription {
+    type: 'ReplicaSetNoPrimary',
+    servers: Map(3) {
+      'ac-f9n2aqc-shard-00-00.mlc5jio.mongodb.net:27017' => [ServerDescription],
+      'ac-f9n2aqc-shard-00-01.mlc5jio.mongodb.net:27017' => [ServerDescription],
+      'ac-f9n2aqc-shard-00-02.mlc5jio.mongodb.net:27017' => [ServerDescription]
+    },
+    stale: false,
+    compatible: true,
+    heartbeatFrequencyMS: 10000,
+    localThresholdMS: 15,
+    setName: 'atlas-tcn4i5-shard-0',
+    maxElectionId: null,
+    maxSetVersion: null,
+    commonWireVersion: 0,
+    logicalSessionTimeoutMinutes: null
+  }
+}
+ GET /api/jobs/scrip-master 500 in 32.4s (next.js: 1846ms, proxy.ts: 146ms, application-code: 30.4s)
+⨯ MongooseServerSelectionError: Could not connect to any servers in your MongoDB Atlas cluster. One common reason is that you're trying to access the database from an IP that isn't whitelisted. Make sure your current IP address is on your Atlas cluster's IP whitelist: https://www.mongodb.com/docs/atlas/security-whitelist/
+    at async connectDB (lib\db\connect.ts:36:18)
+    at async refreshScripMaster (lib\angelone\scripMaster.ts:88:3)
+    at async GET (app\api\jobs\scrip-master\route.ts:15:20)
+  34 |
+  35 |   try {
+> 36 |     cache.conn = await cache.promise
+     |                  ^
+  37 |   } catch (err) {
+  38 |     cache.promise = null
+  39 |     throw err {
+  errorLabelSet: Set(0) {},
+  reason: TopologyDescription {
+    type: 'ReplicaSetNoPrimary',
+    servers: Map(3) {
+      'ac-f9n2aqc-shard-00-00.mlc5jio.mongodb.net:27017' => [ServerDescription],
+      'ac-f9n2aqc-shard-00-01.mlc5jio.mongodb.net:27017' => [ServerDescription],
+      'ac-f9n2aqc-shard-00-02.mlc5jio.mongodb.net:27017' => [ServerDescription]
+    },
+    stale: false,
+    compatible: true,
+    heartbeatFrequencyMS: 10000,
+    localThresholdMS: 15,
+    setName: 'atlas-tcn4i5-shard-0',
+    maxElectionId: null,
+    maxSetVersion: null,
+    commonWireVersion: 0,
+    logicalSessionTimeoutMinutes: null
+  },
+  code: undefined,
+  [cause]: TopologyDescription {
+    type: 'ReplicaSetNoPrimary',
+    servers: Map(3) {
+      'ac-f9n2aqc-shard-00-00.mlc5jio.mongodb.net:27017' => [ServerDescription],
+      'ac-f9n2aqc-shard-00-01.mlc5jio.mongodb.net:27017' => [ServerDescription],
+      'ac-f9n2aqc-shard-00-02.mlc5jio.mongodb.net:27017' => [ServerDescription]
+    },
+    stale: false,
+    compatible: true,
+    heartbeatFrequencyMS: 10000,
+    localThresholdMS: 15,
+    setName: 'atlas-tcn4i5-shard-0',
+    maxElectionId: null,
+    maxSetVersion: null,
+    commonWireVersion: 0,
+    logicalSessionTimeoutMinutes: null
+  }
+}
+ GET /api/jobs/scrip-master 500 in 30.2s (next.js: 11ms, proxy.ts: 26ms, application-code: 30.2s)

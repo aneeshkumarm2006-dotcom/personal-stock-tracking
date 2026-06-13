@@ -42,6 +42,14 @@ const strategyEntrySchema = new Schema(
     // Running high-water mark, set once TP1 is reached. Drives the trailing stop.
     peakPrice: { type: Number },
     direction: { type: String, enum: ['long'], default: 'long' },
+    // How a pending entry fills:
+    //   - 'limit' (buy the dip): entry sits below price, fills when LTP falls to it.
+    //   - 'stop'  (breakout):    entry sits above price, fills when LTP rises to it.
+    // Legacy rows default to 'limit', preserving the original fill behaviour.
+    triggerType: { type: String, enum: ['limit', 'stop'], default: 'limit' },
+    // Live price captured when the entry was created. Used to auto-pick the
+    // trigger type and to reject orders that would fill the instant they're made.
+    referencePrice: { type: Number },
     status: {
       type: String,
       enum: [

@@ -135,7 +135,11 @@ const SECTOR_MAP: Record<string, string> = {
 }
 
 function normalize(symbol: string): string {
-  return symbol.replace(/-EQ$/i, '').replace(/&/g, '_').toUpperCase().trim()
+  return symbol
+    .replace(/-(EQ|BE|BZ|SM|ST)$/i, '')
+    .replace(/&/g, '_')
+    .toUpperCase()
+    .trim()
 }
 
 export function sectorForSymbol(symbol: string | undefined | null): string {

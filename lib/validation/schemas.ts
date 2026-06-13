@@ -77,6 +77,10 @@ const strategyEntryBaseSchema = z.object({
   target2: z.number().positive('target2 must be greater than zero').optional(),
   quantity: positiveInt,
   direction: z.enum(['long']).default('long'),
+  // How a pending entry should fill. 'auto' lets the server decide off the live
+  // price (breakout vs dip); 'limit'/'stop' force the choice. Resolved to a
+  // concrete 'limit'|'stop' before the entry is stored.
+  triggerType: z.enum(['auto', 'limit', 'stop']).default('auto'),
 })
 
 export const strategyEntrySchema = strategyEntryBaseSchema.superRefine(

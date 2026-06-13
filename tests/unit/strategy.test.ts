@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   evaluateEntries,
+  resolveTriggerType,
+  entryTriggered,
   type EvaluatableEntry,
 } from '@/lib/strategy/evaluate'
 import { computeGroupStats } from '@/lib/strategy/group'
@@ -60,6 +62,52 @@ describe('evaluateEntries', () => {
     expect(entry.status).toBe('pending')
     expect(entry.events).toHaveLength(0)
     expect(entry.save).not.toHaveBeenCalled()
+  })
+
+  it('stop (breakout) entry stays pending while price is below entry', async () => {
+    // Regression: the price sits below a breakout entry. It must NOT fill — the
+    // old logic filled any pending entry as soon as ltp <= entryPrice.
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      status: 'pending',
+      triggerType: 'stop',
+    })
+    await evaluateEntries([entry], [snap('T1', 95)])
+    expect(entry.status).toBe('pending')
+    expect(entry.events).toHaveLength(0)
+    expect(entry.save).not.toHaveBeenCalled()
+  })
+
+  it('stop (breakout) entry fills when price rises to entry', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      status: 'pending',
+      triggerType: 'stop',
+    })
+    const out = await evaluateEntries([entry], [snap('T1', 100)])
+    expect(entry.status).toBe('active')
+    expect(entry.events.at(-1)?.type).toBe('entry_hit')
+    expect(out.transitioned).toBe(1)
+  })
+
+  it('limit (dip) entry fills when price falls to entry', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      status: 'pending',
+      triggerType: 'limit',
+    })
+    await evaluateEntries([entry], [snap('T1', 99)])
+    expect(entry.status).toBe('active')
+    expect(entry.events.at(-1)?.type).toBe('entry_hit')
   })
 
   it('active → tp_hit when LTP reaches target', async () => {
@@ -359,4 +407,70 @@ describe('computeGroupStats', () => {
     )
     expect(stats.winRate).toBe(0)
   })
+})
+
+describe('resolveTriggerType', () => {
+
+  it('auto picks stop when entry is at or above the current price', () => {
+
+    expect(resolveTriggerType('auto', 100, 95)).toBe('stop')
+
+    expect(resolveTriggerType('auto', 100, 100)).toBe('stop')
+
+  })
+
+
+
+  it('auto picks limit when entry is below the current price', () => {
+
+    expect(resolveTriggerType('auto', 100, 105)).toBe('limit')
+
+  })
+
+
+
+  it('auto falls back to limit when no reference price is known', () => {
+
+    expect(resolveTriggerType('auto', 100, null)).toBe('limit')
+
+  })
+
+
+
+  it('an explicit choice is honoured regardless of reference price', () => {
+
+    expect(resolveTriggerType('stop', 100, 105)).toBe('stop')
+
+    expect(resolveTriggerType('limit', 100, 95)).toBe('limit')
+
+  })
+
+})
+
+
+
+describe('entryTriggered', () => {
+
+  it('stop fills on the way up, limit on the way down', () => {
+
+    expect(entryTriggered('stop', 100, 100)).toBe(true)
+
+    expect(entryTriggered('stop', 100, 99)).toBe(false)
+
+    expect(entryTriggered('limit', 100, 100)).toBe(true)
+
+    expect(entryTriggered('limit', 100, 101)).toBe(false)
+
+  })
+
+
+
+  it('treats a missing trigger type as limit (legacy behaviour)', () => {
+
+    expect(entryTriggered(undefined, 100, 99)).toBe(true)
+
+    expect(entryTriggered(undefined, 100, 101)).toBe(false)
+
+  })
+
 })

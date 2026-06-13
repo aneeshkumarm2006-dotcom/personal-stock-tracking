@@ -6,6 +6,7 @@ import {
   type ExitMode,
   type StrategyEntryStatus,
   type StrategyEvent,
+  type TriggerType,
 } from './evaluate'
 
 export type GroupForStats = {
@@ -23,6 +24,7 @@ export type EntryForStats = {
   quantity: number
   soldQuantity?: number
   peakPrice?: number | null
+  triggerType?: TriggerType | null
   status: StrategyEntryStatus
   events?: StrategyEvent[]
 }
@@ -33,6 +35,7 @@ export type EntryStats = {
   instrumentSymbol: string
   status: StrategyEntryStatus
   exitMode: ExitMode
+  triggerType: TriggerType
   entryPrice: number
   stopLoss: number
   // Live protective stop: trails up for a trailing entry, breakeven for a
@@ -135,6 +138,7 @@ export function computeGroupStats(
       instrumentSymbol: e.instrumentSymbol ?? '',
       status: e.status,
       exitMode: exitMode(e),
+      triggerType: e.triggerType ?? 'limit',
       entryPrice: e.entryPrice,
       stopLoss: e.stopLoss,
       activeStop: round2(currentStop(e)),

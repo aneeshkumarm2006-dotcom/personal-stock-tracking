@@ -5,6 +5,8 @@ import { connectDB } from '@/lib/db/connect'
 import { StrategyEntry } from '@/lib/db/models/StrategyEntry'
 import { StrategyGroup } from '@/lib/db/models/StrategyGroup'
 import { strategyEntrySchema } from '@/lib/validation/schemas'
+import { entryTriggered, resolveTriggerType } from '@/lib/strategy/evaluate'
+import { fetchReferencePrice } from '@/lib/prices/reference'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,6 +105,37 @@ export async function POST(request: Request) {
     )
   }
 
-  const created = await StrategyEntry.create(data)
+  // Resolve how this entry fills before it is stored. The reference price (live
+  // quote, or last snapshot) lets 'auto' tell a breakout from a dip buy, and
+  // guards against an order that would fill the instant it is created.
+  const referencePrice = await fetchReferencePrice(data.instrumentToken)
+  const triggerType = resolveTriggerType(
+    data.triggerType,
+    data.entryPrice,
+    referencePrice,
+  )
+
+  if (
+    referencePrice !== null &&
+    entryTriggered(triggerType, data.entryPrice, referencePrice)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          triggerType === 'stop'
+            ? 'Entry would trigger immediately: the price is already at or above the entry. Lower the entry, or add it as a limit (dip) buy.'
+            : 'Entry would trigger immediately: the price is already at or below the entry. Raise the entry, or add it as a stop (breakout) buy.',
+        triggerType,
+        referencePrice,
+      },
+      { status: 409 },
+    )
+  }
+
+  const created = await StrategyEntry.create({
+    ...data,
+    triggerType,
+    ...(referencePrice !== null ? { referencePrice } : {}),
+  })
   return NextResponse.json(created.toJSON(), { status: 201 })
 }

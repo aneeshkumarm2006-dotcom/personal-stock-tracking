@@ -5,6 +5,12 @@ import { connectDB } from '@/lib/db/connect'
 import { StrategyEntry } from '@/lib/db/models/StrategyEntry'
 import { StrategyGroup } from '@/lib/db/models/StrategyGroup'
 import { strategyEntryUpdateSchema } from '@/lib/validation/schemas'
+import {
+  entryTriggered,
+  resolveTriggerType,
+  type RequestedTriggerType,
+} from '@/lib/strategy/evaluate'
+import { fetchReferencePrice } from '@/lib/prices/reference'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,7 +100,46 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     }
   }
 
-  Object.assign(existing, parsed.data)
+  // Re-resolve the fill trigger when the entry price or the requested trigger
+  // type changes — a moved entry can flip between a dip buy and a breakout, and
+  // a re-resolved trigger must not fill the instant the edit is saved.
+  const entryPriceChanged =
+    parsed.data.entryPrice != null && parsed.data.entryPrice !== existing.entryPrice
+  const triggerRequested = parsed.data.triggerType
+  // triggerType is resolved separately below; never assign the raw 'auto'.
+  const assignable = { ...parsed.data }
+  delete assignable.triggerType
+  Object.assign(existing, assignable)
+
+  if (entryPriceChanged || triggerRequested !== undefined) {
+    const referencePrice = await fetchReferencePrice(existing.instrumentToken)
+    const triggerType = resolveTriggerType(
+      (triggerRequested ?? existing.triggerType ?? 'auto') as RequestedTriggerType,
+      merged.entryPrice,
+      referencePrice,
+    )
+
+    if (
+      referencePrice !== null &&
+      entryTriggered(triggerType, merged.entryPrice, referencePrice)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            triggerType === 'stop'
+              ? 'Entry would trigger immediately: the price is already at or above the entry. Lower the entry, or use a limit (dip) buy.'
+              : 'Entry would trigger immediately: the price is already at or below the entry. Raise the entry, or use a stop (breakout) buy.',
+          triggerType,
+          referencePrice,
+        },
+        { status: 409 },
+      )
+    }
+
+    existing.triggerType = triggerType
+    if (referencePrice !== null) existing.referencePrice = referencePrice
+  }
+
   await existing.save()
 
   return NextResponse.json(existing.toJSON())

@@ -41,7 +41,13 @@ function runningPct(entry: EntryStats): { label: string; className: string } {
 function statusDisplay(entry: EntryStats): StatusDisplay {
   switch (entry.status) {
     case 'pending':
-      return { label: 'Waiting for entry', variant: 'outline' }
+      return {
+        label:
+          entry.triggerType === 'stop'
+            ? 'Waiting · breakout ↑'
+            : 'Waiting · dip ↓',
+        variant: 'outline',
+      }
     case 'active': {
       if (entry.currentPrice === null) {
         return { label: 'Running', variant: 'secondary' }
