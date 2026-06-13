@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
@@ -48,6 +49,7 @@ const TERMINAL = new Set(['tp_hit', 'sl_hit', 'closed_manual'])
 
 export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
   const queryClient = useQueryClient()
+  const router = useRouter()
 
   const query = useQuery({
     queryKey: ['strategyGroup', groupId],
@@ -78,6 +80,8 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
         queryClient.invalidateQueries({ queryKey: ['strategyGroup', groupId] }),
         queryClient.invalidateQueries({ queryKey: ['strategyGroups'] }),
       ])
+      // The active-group list is server-rendered; refresh so this card leaves it.
+      router.refresh()
     },
     onError: (err: Error) => toast.error(err.message),
   })
@@ -123,9 +127,17 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
           <div>
             <div className="flex items-center gap-2">
               <CardTitle>{group.name}</CardTitle>
-              <Badge variant={group.status === 'active' ? 'default' : 'secondary'}>
-                {group.status}
-              </Badge>
+              {group.status === 'active' ? (
+                <Badge variant="outline" className="gap-1.5">
+                  <span
+                    className="bg-gain inline-block size-1.5 rounded-full"
+                    aria-hidden="true"
+                  />
+                  Active
+                </Badge>
+              ) : (
+                <Badge variant="secondary">Closed</Badge>
+              )}
             </div>
             <CardDescription>
               {formatCurrency(stats.allocatedCapital)} allocated ·{' '}
@@ -139,7 +151,7 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
             )}
             {canClose && (
               <Button
-                size="xs"
+                size="sm"
                 variant="outline"
                 onClick={() => closeMutation.mutate()}
                 disabled={closeMutation.isPending}
@@ -152,14 +164,14 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-6">
+        <dl className="bg-border grid grid-cols-3 gap-px overflow-hidden rounded-lg border sm:grid-cols-6">
           <Stat label="Pending" value={counts.pending} />
           <Stat label="Active" value={counts.active} />
-          <Stat label="TP hit" value={counts.tp_hit} valueClass="text-emerald-500" />
-          <Stat label="SL hit" value={counts.sl_hit} valueClass="text-red-500" />
+          <Stat label="TP hit" value={counts.tp_hit} valueClass="text-gain" />
+          <Stat label="SL hit" value={counts.sl_hit} valueClass="text-loss" />
           <Stat label="Closed" value={counts.closed_manual} />
-          <Stat label="Win rate" value={`${winRatePct.toFixed(2)}%`} />
-        </div>
+          <Stat label="Win rate" value={`${winRatePct.toFixed(0)}%`} />
+        </dl>
 
         <EntriesTable
           groupId={groupId}
@@ -181,9 +193,11 @@ function Stat({
   valueClass?: string
 }) {
   return (
-    <div className="rounded-md border bg-muted/30 px-3 py-2">
-      <div className="text-muted-foreground">{label}</div>
-      <div className={`text-sm font-medium ${valueClass ?? ''}`}>{value}</div>
+    <div className="bg-card px-3 py-2">
+      <dt className="text-muted-foreground text-xs">{label}</dt>
+      <dd className={`text-sm font-medium tabular-nums ${valueClass ?? ''}`}>
+        {value}
+      </dd>
     </div>
   )
 }

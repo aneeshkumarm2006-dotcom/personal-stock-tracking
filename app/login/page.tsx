@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useState, type FormEvent } from 'react'
+import { TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -9,7 +10,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
@@ -22,7 +22,11 @@ function LoginForm() {
   const [passphrase, setPassphrase] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const redirectTo = searchParams.get('redirect') ?? '/portfolio'
+  // Only follow same-origin paths; an absolute or scheme-relative URL here
+  // would be an open redirect.
+  const rawRedirect = searchParams.get('redirect')
+  const redirectTo =
+    rawRedirect && /^\/(?![/\\])/.test(rawRedirect) ? rawRedirect : '/portfolio'
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -57,31 +61,46 @@ function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle>Stock Tracker</CardTitle>
-        <CardDescription>Enter your passphrase to continue.</CardDescription>
-      </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-2">
-          <Label htmlFor="passphrase">Passphrase</Label>
-          <Input
-            id="passphrase"
-            type="password"
-            autoComplete="current-password"
-            value={passphrase}
-            onChange={(event) => setPassphrase(event.target.value)}
-            required
-            autoFocus
-          />
-        </CardContent>
-        <CardFooter>
-          <Button type="submit" disabled={submitting || !passphrase} className="w-full">
-            {submitting ? 'Signing in...' : 'Sign in'}
-          </Button>
-        </CardFooter>
-      </form>
-    </Card>
+    <div className="w-full max-w-sm space-y-6">
+      <div className="flex flex-col items-center gap-2 text-center">
+        <span className="bg-primary text-primary-foreground flex size-9 items-center justify-center rounded-lg">
+          <TrendingUp className="size-5" aria-hidden="true" />
+        </span>
+        <h1 className="font-heading text-lg font-semibold tracking-tight">
+          Stock Tracker
+        </h1>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sign in</CardTitle>
+          <CardDescription>Enter your passphrase to continue.</CardDescription>
+        </CardHeader>
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="passphrase">Passphrase</Label>
+              <Input
+                id="passphrase"
+                type="password"
+                autoComplete="current-password"
+                value={passphrase}
+                onChange={(event) => setPassphrase(event.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+            <Button
+              type="submit"
+              disabled={submitting || !passphrase}
+              className="w-full"
+            >
+              {submitting ? 'Signing in…' : 'Sign in'}
+            </Button>
+          </CardContent>
+        </form>
+      </Card>
+    </div>
   )
 }
 

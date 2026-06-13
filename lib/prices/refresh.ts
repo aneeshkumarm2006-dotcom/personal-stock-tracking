@@ -3,13 +3,9 @@ import { Instrument } from '@/lib/db/models/Instrument'
 import { PriceSnapshot } from '@/lib/db/models/PriceSnapshot'
 import { StrategyEntry } from '@/lib/db/models/StrategyEntry'
 import { Transaction } from '@/lib/db/models/Transaction'
-import {
-  ANGEL_SESSION_SINGLETON_ID,
-  AngelSession,
-} from '@/lib/db/models/AngelSession'
 import { getQuotes, type ExchangeTokens, type PriceSnapshotData } from '@/lib/angelone/quotes'
 import { AuthError, RateLimitError } from '@/lib/angelone/errors'
-import { getValidSession } from '@/lib/angelone/session'
+import { getValidSession, invalidateSession } from '@/lib/angelone/session'
 import { evaluateEntries, type EvaluatableEntry } from '@/lib/strategy/evaluate'
 
 export type RefreshSkipReason = 'no tokens' | 'rate_limited' | 'error'
@@ -99,10 +95,6 @@ async function fetchEvaluatableEntries(): Promise<EvaluatableEntry[]> {
   return docs as unknown as EvaluatableEntry[]
 }
 
-async function invalidateSession(): Promise<void> {
-  await AngelSession.deleteOne({ _id: ANGEL_SESSION_SINGLETON_ID })
-}
-
 async function fetchQuotesWithReauth(grouped: ExchangeTokens): Promise<PriceSnapshotData[]> {
   await getValidSession()
   try {
@@ -174,16 +166,34 @@ export async function runRefreshCycle(): Promise<RefreshResult> {
     }
   }
 
-  await upsertSnapshots(snapshots)
+  try {
+    await upsertSnapshots(snapshots)
 
-  const entries = await fetchEvaluatableEntries()
-  const outcome = await evaluateEntries(entries, snapshots)
+    const entries = await fetchEvaluatableEntries()
+    const outcome = await evaluateEntries(entries, snapshots)
 
-  return {
-    skipped: false,
-    fetched: snapshots.length,
-    evaluated: outcome.evaluated,
-    transitioned: outcome.transitioned,
-    durationMs: Date.now() - startedAt,
+    return {
+      skipped: false,
+      fetched: snapshots.length,
+      evaluated: outcome.evaluated,
+      transitioned: outcome.transitioned,
+      durationMs: Date.now() - startedAt,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.log(
+      JSON.stringify({
+        event: 'prices.refresh',
+        status: 'error',
+        stage: 'persist_evaluate',
+        message,
+      }),
+    )
+    return {
+      skipped: true,
+      reason: 'error',
+      message,
+      durationMs: Date.now() - startedAt,
+    }
   }
 }

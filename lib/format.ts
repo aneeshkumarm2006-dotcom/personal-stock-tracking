@@ -71,5 +71,5 @@ export function pnlColorClass(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value) || value === 0) {
     return 'text-muted-foreground'
   }
-  return value > 0 ? 'text-emerald-500' : 'text-red-500'
+  return value > 0 ? 'text-gain' : 'text-loss'
 }

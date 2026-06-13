@@ -26,11 +26,6 @@ vi.mock('@/lib/db/models/Transaction', () => ({
   Transaction: { aggregate: vi.fn() },
 }))
 
-vi.mock('@/lib/db/models/AngelSession', () => ({
-  ANGEL_SESSION_SINGLETON_ID: 'singleton',
-  AngelSession: { deleteOne: vi.fn().mockResolvedValue(undefined) },
-}))
-
 vi.mock('@/lib/angelone/quotes', () => ({
   getQuotes: vi.fn(),
 }))
@@ -39,6 +34,7 @@ vi.mock('@/lib/angelone/session', () => ({
   getValidSession: vi
     .fn()
     .mockResolvedValue({ jwtToken: 'jwt', feedToken: 'feed' }),
+  invalidateSession: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/lib/strategy/evaluate', () => ({
@@ -53,9 +49,8 @@ import { Instrument } from '@/lib/db/models/Instrument'
 import { PriceSnapshot } from '@/lib/db/models/PriceSnapshot'
 import { StrategyEntry } from '@/lib/db/models/StrategyEntry'
 import { Transaction } from '@/lib/db/models/Transaction'
-import { AngelSession } from '@/lib/db/models/AngelSession'
 import { getQuotes } from '@/lib/angelone/quotes'
-import { getValidSession } from '@/lib/angelone/session'
+import { getValidSession, invalidateSession } from '@/lib/angelone/session'
 import { evaluateEntries } from '@/lib/strategy/evaluate'
 
 // ----- Helpers ------------------------------------------------------------
@@ -68,7 +63,7 @@ const aggregateMock = Transaction.aggregate as unknown as ReturnType<typeof vi.f
 const strategyFindMock = StrategyEntry.find as unknown as ReturnType<typeof vi.fn>
 const instrumentFindMock = Instrument.find as unknown as ReturnType<typeof vi.fn>
 const bulkWriteMock = PriceSnapshot.bulkWrite as unknown as ReturnType<typeof vi.fn>
-const deleteOneMock = AngelSession.deleteOne as unknown as ReturnType<typeof vi.fn>
+const invalidateSessionMock = invalidateSession as unknown as ReturnType<typeof vi.fn>
 const getQuotesMock = getQuotes as unknown as ReturnType<typeof vi.fn>
 const getValidSessionMock = getValidSession as unknown as ReturnType<typeof vi.fn>
 const evaluateMock = evaluateEntries as unknown as ReturnType<typeof vi.fn>
@@ -103,7 +98,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   // Reset default resolved values that vi.clearAllMocks() blew away.
   bulkWriteMock.mockResolvedValue(undefined)
-  deleteOneMock.mockResolvedValue(undefined)
+  invalidateSessionMock.mockResolvedValue(undefined)
   getValidSessionMock.mockResolvedValue({ jwtToken: 'jwt', feedToken: 'feed' })
   evaluateMock.mockResolvedValue({ evaluated: 0, transitioned: 0 })
 })
@@ -200,7 +195,7 @@ describe('runRefreshCycle', () => {
     const result = await runRefreshCycle()
 
     expect(getValidSessionMock).toHaveBeenCalledTimes(2) // initial + re-auth
-    expect(deleteOneMock).toHaveBeenCalledTimes(1) // session invalidated once
+    expect(invalidateSessionMock).toHaveBeenCalledTimes(1) // session invalidated once
     expect(getQuotesMock).toHaveBeenCalledTimes(2) // failed call + retry
     expect(bulkWriteMock).toHaveBeenCalledTimes(1)
     expect(result).toMatchObject({ skipped: false, fetched: 1 })

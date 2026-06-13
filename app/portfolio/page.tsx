@@ -7,6 +7,7 @@ import {
 import { computeSummary } from '@/lib/portfolio/summary'
 import { loadSnapshotsForTokens } from '@/lib/prices/snapshots'
 
+import { PageHeader, SectionHeader } from '@/components/PageHeader'
 import { PortfolioSummaryCards } from '@/components/portfolio/PortfolioSummaryCards'
 import { HoldingsTable } from '@/components/portfolio/HoldingsTable'
 import { AddTransactionDialog } from '@/components/portfolio/AddTransactionDialog'
@@ -29,38 +30,32 @@ export default async function PortfolioPage() {
   const summary = computeSummary(holdings, snapshots)
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-8 p-4 sm:p-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">
-            Portfolio
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Live holdings, P&L and history powered by Angel One.
-          </p>
-        </div>
-        <AddTransactionDialog />
-      </header>
+    <div className="mx-auto w-full max-w-7xl space-y-8 px-4 py-6 sm:px-6 sm:py-8">
+      <PageHeader
+        title="Portfolio"
+        description="Live holdings, P&L and history powered by Angel One."
+        actions={<AddTransactionDialog />}
+      />
 
       <PortfolioSummaryCards summary={summary} />
 
       <section className="space-y-3">
-        <h2 className="font-heading text-lg font-medium">Holdings</h2>
+        <SectionHeader title="Holdings" />
         <HoldingsTable />
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-heading text-lg font-medium">Charts</h2>
+        <SectionHeader title="Analytics" />
         <PortfolioCharts />
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-heading text-lg font-medium">Realized P&L</h2>
+        <SectionHeader title="Realized P&L" />
         <RealizedPnLTable />
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-heading text-lg font-medium">Transaction history</h2>
+        <SectionHeader title="Transaction history" />
         <TransactionHistoryTable />
       </section>
     </div>

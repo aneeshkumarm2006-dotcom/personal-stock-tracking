@@ -92,13 +92,25 @@ export async function getQuotes(
   )
 
   const fetchedAt = new Date()
-  const data = response.data as { fetched?: RawQuoteRow[] } | RawQuoteRow[] | undefined
+  const data = response.data as
+    | { fetched?: RawQuoteRow[]; unfetched?: unknown[] }
+    | RawQuoteRow[]
+    | undefined
 
   let rows: RawQuoteRow[] = []
   if (Array.isArray(data)) {
     rows = data
   } else if (data && Array.isArray(data.fetched)) {
     rows = data.fetched
+    if (Array.isArray(data.unfetched) && data.unfetched.length > 0) {
+      console.log(
+        JSON.stringify({
+          event: 'angelone.marketData',
+          status: 'partial',
+          unfetched: data.unfetched.length,
+        }),
+      )
+    }
   } else {
     throw new NetworkError('Angel One marketData response had no fetched rows', response)
   }

@@ -116,21 +116,26 @@ export function InstrumentTypeahead({
           if (query.trim().length >= 2) setOpen(true)
         }}
       />
-      {open && (results.length > 0 || loading) && (
+      {open && (loading || results.length > 0 || query.trim().length >= 2) && (
         <ul
           id={listId}
           role="listbox"
-          className="bg-popover text-popover-foreground absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border shadow-md"
+          className="bg-popover text-popover-foreground ring-foreground/10 absolute z-50 mt-1.5 max-h-64 w-full overflow-auto rounded-lg p-1 shadow-lg ring-1"
         >
           {loading && (
             <li className="text-muted-foreground px-2 py-1.5 text-xs">Searching…</li>
+          )}
+          {!loading && results.length === 0 && (
+            <li className="text-muted-foreground px-2 py-1.5 text-xs">
+              No instruments found.
+            </li>
           )}
           {!loading &&
             results.map((r) => (
               <li key={`${r.exchange}-${r.token}`} role="option" aria-selected={false}>
                 <button
                   type="button"
-                  className="hover:bg-accent hover:text-accent-foreground flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-sm"
+                  className="hover:bg-muted flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors"
                   onClick={() => handleSelect(r)}
                 >
                   <span className="font-medium">{r.symbol}</span>

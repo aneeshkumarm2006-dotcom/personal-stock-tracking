@@ -112,8 +112,8 @@ export function ManualCloseDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="space-y-1">
+        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="space-y-1.5">
             <Label htmlFor="close-price">Close price (₹)</Label>
             <Input
               id="close-price"
@@ -130,7 +130,7 @@ export function ManualCloseDialog({
             )}
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <Label htmlFor="close-date">Close date</Label>
             <Input id="close-date" type="date" {...form.register('closeDate')} />
             {form.formState.errors.closeDate && (

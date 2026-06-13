@@ -9,6 +9,14 @@ import {
   Legend,
 } from 'recharts'
 
+import { formatCurrency } from '@/lib/format'
+import {
+  CHART_PALETTE,
+  legendStyle,
+  tooltipContentStyle,
+  tooltipItemStyle,
+} from './chartTheme'
+
 export type AllocationByInstrumentDatum = {
   instrumentToken: string
   instrumentSymbol: string
@@ -20,17 +28,9 @@ export type AllocationByInstrumentPieProps = {
   height?: number
 }
 
-const PALETTE = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--chart-4)',
-  'var(--chart-5)',
-]
-
 export function AllocationByInstrumentPie({
   data,
-  height = 320,
+  height = 280,
 }: AllocationByInstrumentPieProps) {
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -39,18 +39,25 @@ export function AllocationByInstrumentPie({
           data={data}
           dataKey="currentValue"
           nameKey="instrumentSymbol"
-          outerRadius="70%"
-          label
+          innerRadius="55%"
+          outerRadius="80%"
+          paddingAngle={2}
+          stroke="var(--card)"
+          strokeWidth={2}
         >
           {data.map((entry, idx) => (
             <Cell
               key={entry.instrumentToken}
-              fill={PALETTE[idx % PALETTE.length]}
+              fill={CHART_PALETTE[idx % CHART_PALETTE.length]}
             />
           ))}
         </Pie>
-        <Tooltip />
-        <Legend />
+        <Tooltip
+          contentStyle={tooltipContentStyle}
+          itemStyle={tooltipItemStyle}
+          formatter={(value) => formatCurrency(Number(value))}
+        />
+        <Legend iconType="circle" iconSize={8} wrapperStyle={legendStyle} />
       </PieChart>
     </ResponsiveContainer>
   )

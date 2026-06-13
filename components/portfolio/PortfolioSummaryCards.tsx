@@ -1,5 +1,5 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatPercent, pnlColorClass } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import type { PortfolioSummary } from '@/lib/portfolio/summary'
 
 export type PortfolioSummaryCardsProps = {
@@ -13,6 +13,15 @@ type Metric = {
   valueClass?: string
 }
 
+/* Border map for a 2-col mobile / 5-col desktop strip of exactly 5 cells. */
+const CELL_BORDERS = [
+  'border-b border-r lg:border-b-0',
+  'border-b lg:border-r lg:border-b-0',
+  'border-b border-r lg:border-b-0',
+  'border-b lg:border-r lg:border-b-0',
+  'col-span-2 lg:col-span-1',
+]
+
 export function PortfolioSummaryCards({ summary }: PortfolioSummaryCardsProps) {
   const unrealizedPct =
     summary.totalInvested > 0
@@ -20,8 +29,8 @@ export function PortfolioSummaryCards({ summary }: PortfolioSummaryCardsProps) {
       : 0
 
   const metrics: Metric[] = [
-    { label: 'Total Invested', value: formatCurrency(summary.totalInvested) },
-    { label: 'Current Value', value: formatCurrency(summary.totalCurrentValue) },
+    { label: 'Total invested', value: formatCurrency(summary.totalInvested) },
+    { label: 'Current value', value: formatCurrency(summary.totalCurrentValue) },
     {
       label: 'Unrealized P&L',
       value: formatCurrency(summary.totalUnrealizedPnL),
@@ -34,29 +43,39 @@ export function PortfolioSummaryCards({ summary }: PortfolioSummaryCardsProps) {
       valueClass: pnlColorClass(summary.totalRealizedPnL),
     },
     {
-      label: 'Overall Return',
+      label: 'Overall return',
       value: formatPercent(summary.overallReturnPct),
       valueClass: pnlColorClass(summary.overallReturnPct),
     },
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-      {metrics.map((m) => (
-        <Card key={m.label} size="sm">
-          <CardHeader>
-            <CardDescription>{m.label}</CardDescription>
-            <CardTitle className={m.valueClass}>{m.value}</CardTitle>
-          </CardHeader>
-          {m.hint ? (
-            <CardContent>
-              <span className={`text-xs ${m.valueClass ?? 'text-muted-foreground'}`}>
+    <dl className="bg-card ring-foreground/10 grid grid-cols-2 overflow-hidden rounded-xl ring-1 lg:grid-cols-5">
+      {metrics.map((m, idx) => (
+        <div key={m.label} className={cn('px-4 py-3.5', CELL_BORDERS[idx])}>
+          <dt className="text-muted-foreground text-xs">{m.label}</dt>
+          <dd className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
+            <span
+              className={cn(
+                'text-lg leading-tight font-semibold tracking-tight tabular-nums',
+                m.valueClass
+              )}
+            >
+              {m.value}
+            </span>
+            {m.hint ? (
+              <span
+                className={cn(
+                  'text-xs font-medium tabular-nums',
+                  m.valueClass ?? 'text-muted-foreground'
+                )}
+              >
                 {m.hint}
               </span>
-            </CardContent>
-          ) : null}
-        </Card>
+            ) : null}
+          </dd>
+        </div>
       ))}
-    </div>
+    </dl>
   )
 }

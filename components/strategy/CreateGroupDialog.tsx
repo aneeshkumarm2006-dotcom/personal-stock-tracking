@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -35,6 +36,7 @@ type ParsedValues = z.output<typeof formSchema>
 export function CreateGroupDialog() {
   const [open, setOpen] = useState(false)
   const queryClient = useQueryClient()
+  const router = useRouter()
 
   const form = useForm<FormValues, unknown, ParsedValues>({
     resolver: zodResolver(formSchema),
@@ -67,6 +69,8 @@ export function CreateGroupDialog() {
       }
       toast.success('Strategy group created')
       await queryClient.invalidateQueries({ queryKey: ['strategyGroups'] })
+      // The group list is server-rendered; refresh it so the new group appears.
+      router.refresh()
       setOpen(false)
     } catch {
       toast.error('Network error')
@@ -75,7 +79,7 @@ export function CreateGroupDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm">Create group</Button>} />
+      <DialogTrigger render={<Button>Create group</Button>} />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create strategy group</DialogTitle>
@@ -84,8 +88,8 @@ export function CreateGroupDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="space-y-1">
+        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="space-y-1.5">
             <Label htmlFor="group-name">Name</Label>
             <Input
               id="group-name"
@@ -100,7 +104,7 @@ export function CreateGroupDialog() {
             )}
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <Label htmlFor="group-capital">Allocated capital (₹)</Label>
             <Input
               id="group-capital"

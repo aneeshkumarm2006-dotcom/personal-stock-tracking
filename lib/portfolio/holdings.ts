@@ -53,6 +53,26 @@ type Lot = {
   perUnitCharge: number
 }
 
+export type LedgerCheckTx = {
+  type: 'BUY' | 'SELL'
+  quantity: number
+  date: Date | string
+}
+
+// True when, replaying the ledger in date order, sold quantity ever exceeds
+// bought quantity (i.e. an oversell / short position, which this cash-equity
+// ledger does not support). Ties on date keep input order (stable sort), so
+// callers should append the candidate transaction after existing ones.
+export function hasNegativeBalance(transactions: LedgerCheckTx[]): boolean {
+  const ordered = [...transactions].sort((a, b) => toTime(a.date) - toTime(b.date))
+  let balance = 0
+  for (const tx of ordered) {
+    balance += tx.type === 'BUY' ? tx.quantity : -tx.quantity
+    if (balance < 0) return true
+  }
+  return false
+}
+
 export function computeHoldings(transactions: TransactionForHoldings[]): HoldingData[] {
   const byToken = new Map<string, TransactionForHoldings[]>()
   for (const tx of transactions) {

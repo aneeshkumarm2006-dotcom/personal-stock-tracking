@@ -24,11 +24,12 @@ const candleCache = new Map<string, CacheEntry>()
 
 function cacheKey(
   token: string,
+  exchange: string,
   interval: CandleInterval,
   fromDate: Date,
   toDate: Date,
 ): string {
-  return `${token}-${interval}-${fromDate.toDateString()}-${toDate.toDateString()}`
+  return `${exchange}-${token}-${interval}-${fromDate.toDateString()}-${toDate.toDateString()}`
 }
 
 function formatIst(date: Date): string {
@@ -61,7 +62,7 @@ export async function getCandles(
   fromDate: Date,
   toDate: Date,
 ): Promise<CandleData[]> {
-  const key = cacheKey(token, interval, fromDate, toDate)
+  const key = cacheKey(token, exchange, interval, fromDate, toDate)
   const cached = candleCache.get(key)
   if (cached && cached.expiresAt > Date.now()) {
     return cached.data

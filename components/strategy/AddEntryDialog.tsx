@@ -31,17 +31,34 @@ const numberInput = z.preprocess(
   z.number().positive('Must be greater than 0'),
 )
 
-const formSchema = z.object({
-  instrumentToken: z.string().min(1, 'Pick an instrument'),
-  instrumentSymbol: z.string().min(1, 'Pick an instrument'),
-  entryPrice: numberInput,
-  stopLoss: numberInput,
-  targetPrice: numberInput,
-  quantity: z.preprocess(
-    (v) => (v === '' || v === null || v === undefined ? Number.NaN : Number(v)),
-    z.number().int('Whole number only').positive('Must be greater than 0'),
-  ),
-})
+const formSchema = z
+  .object({
+    instrumentToken: z.string().min(1, 'Pick an instrument'),
+    instrumentSymbol: z.string().min(1, 'Pick an instrument'),
+    entryPrice: numberInput,
+    stopLoss: numberInput,
+    targetPrice: numberInput,
+    quantity: z.preprocess(
+      (v) => (v === '' || v === null || v === undefined ? Number.NaN : Number(v)),
+      z.number().int('Whole number only').positive('Must be greater than 0'),
+    ),
+  })
+  .superRefine((data, ctx) => {
+    if (data.stopLoss >= data.entryPrice) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['stopLoss'],
+        message: 'Must be below entry price',
+      })
+    }
+    if (data.targetPrice <= data.entryPrice) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['targetPrice'],
+        message: 'Must be above entry price',
+      })
+    }
+  })
 
 type FormValues = z.input<typeof formSchema>
 type ParsedValues = z.output<typeof formSchema>
@@ -171,18 +188,18 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="xs">Add entry</Button>} />
+      <DialogTrigger render={<Button size="sm">Add entry</Button>} />
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add strategy entry</DialogTitle>
           <DialogDescription>
-            Define an entry, stop loss, and target price. The system will track LTP and
-            transition the entry through pending → active → tp/sl_hit automatically.
+            Define an entry, stop loss, and target price. The entry is tracked
+            against live prices and closes automatically at target or stop.
           </DialogDescription>
         </DialogHeader>
 
-        <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="space-y-1">
+        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="space-y-1.5">
             <Label>Instrument</Label>
             <InstrumentTypeahead
               value={selectedInstrument}
@@ -196,7 +213,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="entry-price">Entry price (₹)</Label>
               <Input
                 id="entry-price"
@@ -212,7 +229,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
                 </p>
               )}
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="entry-qty">Quantity</Label>
               <Input
                 id="entry-qty"
@@ -231,7 +248,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="stop-loss">Stop loss (₹)</Label>
               <Input
                 id="stop-loss"
@@ -247,7 +264,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
                 </p>
               )}
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="target-price">Target price (₹)</Label>
               <Input
                 id="target-price"

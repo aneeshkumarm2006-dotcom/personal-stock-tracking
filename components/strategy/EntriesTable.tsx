@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
   Table,
   TableBody,
@@ -41,18 +42,22 @@ function statusDisplay(entry: EntryStats): StatusDisplay {
       const sign = pct >= 0 ? '+' : ''
       return {
         label: `Running ${sign}${pct.toFixed(2)}%`,
-        variant: 'secondary',
-        className: pct >= 0 ? 'text-emerald-500' : 'text-red-500',
+        variant: 'outline',
+        className: pct >= 0 ? 'text-gain' : 'text-loss',
       }
     }
     case 'tp_hit':
       return {
-        label: 'TP HIT',
-        variant: 'default',
-        className: 'bg-emerald-600 text-white',
+        label: 'TP hit',
+        variant: 'outline',
+        className: 'bg-gain/10 text-gain border-transparent',
       }
     case 'sl_hit':
-      return { label: 'SL HIT', variant: 'destructive' }
+      return {
+        label: 'SL hit',
+        variant: 'outline',
+        className: 'bg-loss/10 text-loss border-transparent',
+      }
     case 'closed_manual':
       return { label: 'Closed', variant: 'outline' }
     default:
@@ -65,15 +70,16 @@ export function EntriesTable({ groupId, entries, allowClose = true }: EntriesTab
 
   if (entries.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-        No entries yet. Add one to start tracking trade ideas in this group.
-      </div>
+      <EmptyState
+        className="min-h-24 py-6"
+        description="No entries yet. Add one to start tracking trade ideas in this group."
+      />
     )
   }
 
   return (
     <div className="space-y-2">
-      <div className="rounded-lg border">
+      <div className="overflow-hidden rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>

@@ -52,7 +52,7 @@ export const strategyGroupSchema = z.object({
 
 export type StrategyGroupInput = z.infer<typeof strategyGroupSchema>
 
-export const strategyEntrySchema = z.object({
+const strategyEntryBaseSchema = z.object({
   groupId: z.string().min(1),
   instrumentToken: z.string().min(1),
   instrumentSymbol: z.string().min(1),
@@ -62,6 +62,29 @@ export const strategyEntrySchema = z.object({
   quantity: positiveInt,
   direction: z.enum(['long']).default('long'),
 })
+
+export const strategyEntrySchema = strategyEntryBaseSchema.superRefine(
+  (data, ctx) => {
+    if (data.stopLoss >= data.entryPrice) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['stopLoss'],
+        message: 'stopLoss must be below entryPrice for a long entry',
+      })
+    }
+    if (data.targetPrice <= data.entryPrice) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['targetPrice'],
+        message: 'targetPrice must be above entryPrice for a long entry',
+      })
+    }
+  },
+)
+
+export const strategyEntryUpdateSchema = strategyEntryBaseSchema
+  .partial()
+  .omit({ groupId: true, direction: true })
 
 export type StrategyEntryInput = z.infer<typeof strategyEntrySchema>
 

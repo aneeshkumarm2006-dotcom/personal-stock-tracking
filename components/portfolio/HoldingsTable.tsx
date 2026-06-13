@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { EmptyState, ErrorState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency, formatInt, formatIstTime, formatPercent, pnlColorClass } from '@/lib/format'
 import type { EnrichedHolding } from '@/lib/portfolio/summary'
@@ -38,11 +39,11 @@ export function HoldingsTable({ initialData }: HoldingsTableProps) {
   })
 
   if (query.isLoading) {
-    return <Skeleton className="h-64 w-full" />
+    return <Skeleton className="h-64 w-full rounded-lg" />
   }
 
   if (query.isError) {
-    return <p className="text-destructive text-sm">Unable to load holdings.</p>
+    return <ErrorState message="Unable to load holdings." />
   }
 
   const data = query.data
@@ -51,15 +52,16 @@ export function HoldingsTable({ initialData }: HoldingsTableProps) {
 
   if (openHoldings.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-        No open holdings yet. Add a BUY transaction to get started.
-      </div>
+      <EmptyState
+        title="No open holdings"
+        description="Add a BUY transaction to get started."
+      />
     )
   }
 
   return (
     <div className="space-y-2">
-      <div className="rounded-lg border">
+      <div className="bg-card overflow-hidden rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -80,7 +82,7 @@ export function HoldingsTable({ initialData }: HoldingsTableProps) {
                 <TableCell className="font-medium">
                   <Link
                     href={`/portfolio/${encodeURIComponent(h.instrumentToken)}`}
-                    className="hover:underline"
+                    className="underline-offset-4 hover:underline"
                   >
                     {h.instrumentSymbol || h.instrumentToken}
                   </Link>
@@ -104,8 +106,8 @@ export function HoldingsTable({ initialData }: HoldingsTableProps) {
           </TableBody>
         </Table>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Last updated: {formatIstTime(lastUpdated)}
+      <p className="text-muted-foreground text-right text-xs">
+        Last updated {formatIstTime(lastUpdated)}
       </p>
     </div>
   )

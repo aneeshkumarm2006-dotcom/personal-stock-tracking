@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   AllocationByInstrumentPie,
@@ -122,7 +123,7 @@ export function PortfolioCharts() {
         </CardHeader>
         <CardContent>
           {isLoadingHoldings ? (
-            <Skeleton className="h-80 w-full" />
+            <Skeleton className="h-[280px] w-full" />
           ) : allocationByInstrument.length === 0 ? (
             <EmptyChart>No open holdings to allocate.</EmptyChart>
           ) : (
@@ -138,7 +139,7 @@ export function PortfolioCharts() {
         </CardHeader>
         <CardContent>
           {isLoadingHoldings ? (
-            <Skeleton className="h-80 w-full" />
+            <Skeleton className="h-[280px] w-full" />
           ) : allocationBySector.length === 0 ? (
             <EmptyChart>No open holdings to allocate.</EmptyChart>
           ) : (
@@ -156,7 +157,7 @@ export function PortfolioCharts() {
         </CardHeader>
         <CardContent>
           {isLoadingHistory ? (
-            <Skeleton className="h-80 w-full" />
+            <Skeleton className="h-[280px] w-full" />
           ) : portfolioValueSeries.length === 0 ? (
             <EmptyChart>No daily snapshots yet — runs after market close.</EmptyChart>
           ) : (
@@ -172,7 +173,7 @@ export function PortfolioCharts() {
         </CardHeader>
         <CardContent>
           {isLoadingHoldings ? (
-            <Skeleton className="h-80 w-full" />
+            <Skeleton className="h-[280px] w-full" />
           ) : instrumentPnL.length === 0 ? (
             <EmptyChart>No P&L recorded yet.</EmptyChart>
           ) : (
@@ -186,8 +187,6 @@ export function PortfolioCharts() {
 
 function EmptyChart({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-muted-foreground flex h-80 items-center justify-center rounded-md border border-dashed text-sm">
-      {children}
-    </div>
+    <EmptyState className="h-[280px] min-h-0 py-0" description={children} />
   )
 }

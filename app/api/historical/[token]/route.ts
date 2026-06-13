@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { getCandles } from '@/lib/angelone/historical'
+import { getCandles, type CandleData } from '@/lib/angelone/historical'
+import { getValidSession, invalidateSession } from '@/lib/angelone/session'
+import { AuthError, RateLimitError } from '@/lib/angelone/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,13 +52,45 @@ export async function GET(request: Request, { params }: RouteContext) {
     )
   }
 
-  const candles = await getCandles(
-    token,
-    parsed.data.exchange,
-    parsed.data.interval,
-    parsed.data.from,
-    parsed.data.to,
-  )
+  const fetchCandles = () =>
+    getCandles(
+      token,
+      parsed.data.exchange,
+      parsed.data.interval,
+      parsed.data.from,
+      parsed.data.to,
+    )
+
+  let candles: CandleData[]
+  try {
+    await getValidSession()
+    try {
+      candles = await fetchCandles()
+    } catch (err) {
+      if (err instanceof AuthError) {
+        await invalidateSession()
+        await getValidSession()
+        candles = await fetchCandles()
+      } else {
+        throw err
+      }
+    }
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      return NextResponse.json(
+        { error: 'Rate limited by data provider — try again shortly' },
+        { status: 503 },
+      )
+    }
+    const message = err instanceof Error ? err.message : String(err)
+    console.log(
+      JSON.stringify({ event: 'historical.fetch', status: 'error', token, message }),
+    )
+    return NextResponse.json(
+      { error: 'Failed to load price history' },
+      { status: 502 },
+    )
+  }
 
   return NextResponse.json(candles)
 }

@@ -71,6 +71,16 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
   const update: Record<string, unknown> = {}
   if ('action' in parsed.data && parsed.data.action === 'close') {
+    const openEntries = await StrategyEntry.countDocuments({
+      groupId: id,
+      status: { $nin: TERMINAL_STATUSES },
+    })
+    if (openEntries > 0) {
+      return NextResponse.json(
+        { error: 'Cannot close group with open entries' },
+        { status: 409 },
+      )
+    }
     update.status = 'closed'
     update.closedAt = new Date()
   } else if ('name' in parsed.data || 'allocatedCapital' in parsed.data) {

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ChevronRightIcon } from 'lucide-react'
 
 import { connectDB } from '@/lib/db/connect'
 import { StrategyEntry } from '@/lib/db/models/StrategyEntry'
@@ -13,6 +14,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/PageHeader'
 import {
   Table,
   TableBody,
@@ -57,12 +60,16 @@ function statusBadge(status: StrategyEntryStatus) {
   switch (status) {
     case 'tp_hit':
       return (
-        <Badge variant="default" className="bg-emerald-600 text-white">
-          TP HIT
+        <Badge variant="outline" className="bg-gain/10 text-gain border-transparent">
+          TP hit
         </Badge>
       )
     case 'sl_hit':
-      return <Badge variant="destructive">SL HIT</Badge>
+      return (
+        <Badge variant="outline" className="bg-loss/10 text-loss border-transparent">
+          SL hit
+        </Badge>
+      )
     case 'closed_manual':
       return <Badge variant="outline">Closed</Badge>
     case 'active':
@@ -135,25 +142,26 @@ export default async function StrategyHistoryPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">
-            Strategy history
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Closed strategy groups with their outcomes and event timelines.
-          </p>
-        </div>
-        <Button size="sm" variant="outline" render={<Link href="/strategy" />}>
-          Back to active groups
-        </Button>
-      </header>
+    <div className="mx-auto w-full max-w-7xl space-y-8 px-4 py-6 sm:px-6 sm:py-8">
+      <PageHeader
+        title="Strategy history"
+        description="Closed strategy groups with their outcomes and event timelines."
+        actions={
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href="/strategy" />}
+          >
+            Back to active groups
+          </Button>
+        }
+      />
 
       {groupsRaw.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-          No closed groups yet.
-        </div>
+        <EmptyState
+          title="No closed groups yet"
+          description="Groups appear here once every entry is resolved and the group is closed."
+        />
       ) : (
         <div className="space-y-4">
           {groupsRaw.map((g) => {
@@ -171,11 +179,11 @@ export default async function StrategyHistoryPage() {
             return (
               <Card key={id}>
                 <CardHeader>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
                     <div>
                       <div className="flex items-center gap-2">
                         <CardTitle>{g.name}</CardTitle>
-                        <Badge variant="secondary">closed</Badge>
+                        <Badge variant="secondary">Closed</Badge>
                       </div>
                       <CardDescription>
                         {formatIstDate(g.createdAt)} → {formatIstDate(g.closedAt)} ·{' '}
@@ -183,16 +191,22 @@ export default async function StrategyHistoryPage() {
                         {entries.length === 1 ? 'entry' : 'entries'}
                       </CardDescription>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="rounded-md border bg-muted/30 px-2 py-1">
-                        Win rate <strong>{winRate.toFixed(2)}%</strong>
-                      </span>
-                      <span
-                        className={`rounded-md border bg-muted/30 px-2 py-1 ${pnlColorClass(netResult)}`}
-                      >
-                        Net result <strong>{formatCurrency(netResult)}</strong>
-                      </span>
-                    </div>
+                    <dl className="flex items-start gap-6">
+                      <div>
+                        <dt className="text-muted-foreground text-xs">Win rate</dt>
+                        <dd className="text-sm font-medium tabular-nums">
+                          {winRate.toFixed(0)}%
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground text-xs">Net result</dt>
+                        <dd
+                          className={`text-sm font-medium tabular-nums ${pnlColorClass(netResult)}`}
+                        >
+                          {formatCurrency(netResult)}
+                        </dd>
+                      </div>
+                    </dl>
                   </div>
                 </CardHeader>
 
@@ -207,15 +221,19 @@ export default async function StrategyHistoryPage() {
                         return (
                           <details
                             key={String(e._id)}
-                            className="rounded-md border bg-muted/20 px-3 py-2"
+                            className="group overflow-hidden rounded-lg border"
                           >
-                            <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 text-sm">
-                              <span className="flex flex-wrap items-center gap-2">
+                            <summary className="hover:bg-muted/50 flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm transition-colors select-none [&::-webkit-details-marker]:hidden">
+                              <span className="flex min-w-0 flex-wrap items-center gap-2">
+                                <ChevronRightIcon
+                                  className="text-muted-foreground size-3.5 shrink-0 transition-transform group-open:rotate-90"
+                                  aria-hidden="true"
+                                />
                                 <span className="font-medium">
                                   {e.instrumentSymbol || e.instrumentToken}
                                 </span>
                                 {statusBadge(e.status)}
-                                <span className="text-muted-foreground text-xs">
+                                <span className="text-muted-foreground text-xs tabular-nums">
                                   Entry {formatCurrency(e.entryPrice)} · SL{' '}
                                   {formatCurrency(e.stopLoss)} · TP{' '}
                                   {formatCurrency(e.targetPrice)} · Qty{' '}
@@ -223,38 +241,46 @@ export default async function StrategyHistoryPage() {
                                 </span>
                               </span>
                               <span
-                                className={`text-sm font-medium ${pnlColorClass(pnl ?? 0)}`}
+                                className={`text-sm font-medium tabular-nums ${pnlColorClass(pnl ?? 0)}`}
                               >
                                 {pnl !== null ? formatCurrency(pnl) : '—'}
                               </span>
                             </summary>
 
-                            <div className="mt-3 space-y-3">
-                              <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                            <div className="space-y-3 border-t px-3 py-3">
+                              <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                                 <div>
-                                  <div className="text-muted-foreground">Entry</div>
-                                  <div>{formatCurrency(e.entryPrice)}</div>
+                                  <dt className="text-muted-foreground text-xs">Entry</dt>
+                                  <dd className="text-sm font-medium tabular-nums">
+                                    {formatCurrency(e.entryPrice)}
+                                  </dd>
                                 </div>
                                 <div>
-                                  <div className="text-muted-foreground">Exit</div>
-                                  <div>
+                                  <dt className="text-muted-foreground text-xs">Exit</dt>
+                                  <dd className="text-sm font-medium tabular-nums">
                                     {exit !== null ? formatCurrency(exit) : '—'}
-                                  </div>
+                                  </dd>
                                 </div>
                                 <div>
-                                  <div className="text-muted-foreground">Quantity</div>
-                                  <div>{formatInt(e.quantity)}</div>
+                                  <dt className="text-muted-foreground text-xs">
+                                    Quantity
+                                  </dt>
+                                  <dd className="text-sm font-medium tabular-nums">
+                                    {formatInt(e.quantity)}
+                                  </dd>
                                 </div>
                                 <div>
-                                  <div className="text-muted-foreground">P&L</div>
-                                  <div className={pnlColorClass(pnl ?? 0)}>
+                                  <dt className="text-muted-foreground text-xs">P&L</dt>
+                                  <dd
+                                    className={`text-sm font-medium tabular-nums ${pnlColorClass(pnl ?? 0)}`}
+                                  >
                                     {pnl !== null ? formatCurrency(pnl) : '—'}
-                                  </div>
+                                  </dd>
                                 </div>
-                              </div>
+                              </dl>
 
                               {e.events.length > 0 ? (
-                                <div className="rounded-md border">
+                                <div className="overflow-hidden rounded-md border">
                                   <Table>
                                     <TableHeader>
                                       <TableRow>

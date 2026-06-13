@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { connectDB } from '@/lib/db/connect'
 import { Transaction } from '@/lib/db/models/Transaction'
+import { hasNegativeBalance, type LedgerCheckTx } from '@/lib/portfolio/holdings'
 import { transactionSchema } from '@/lib/validation/schemas'
 
 export const dynamic = 'force-dynamic'
@@ -53,6 +54,32 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: 'Validation failed', issues: parsed.error.issues },
       { status: 400 },
+    )
+  }
+
+  const existing = (await Transaction.find(
+    { instrumentToken: parsed.data.instrumentToken },
+    { type: 1, quantity: 1, date: 1 },
+  ).lean()) as unknown as LedgerCheckTx[]
+
+  const candidate: LedgerCheckTx = {
+    type: parsed.data.type,
+    quantity: parsed.data.quantity,
+    date: parsed.data.date,
+  }
+
+  // Only reject when this transaction introduces the oversell; pre-existing
+  // inconsistent data should not block unrelated new entries.
+  if (
+    !hasNegativeBalance(existing) &&
+    hasNegativeBalance([...existing, candidate])
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'SELL quantity exceeds the quantity held on that date for this instrument',
+      },
+      { status: 409 },
     )
   }
 

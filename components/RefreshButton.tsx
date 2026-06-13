@@ -1,11 +1,14 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { RefreshCwIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { formatIstTime } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 type RefreshSuccess = {
   fetched?: number
@@ -13,10 +16,12 @@ type RefreshSuccess = {
   durationMs?: number
   skipped?: boolean
   reason?: string
+  message?: string
 }
 
 export function RefreshButton() {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   async function handleRefresh() {
@@ -50,11 +55,17 @@ export function RefreshButton() {
           toast.error('Rate limited — try again in 60s')
           return
         }
+        if (data.reason === 'error') {
+          toast.error(`Refresh failed: ${data.message ?? 'unknown error'}`)
+          return
+        }
         toast.message(`Refresh skipped: ${data.reason ?? 'no work to do'}`)
         return
       }
 
       await queryClient.invalidateQueries()
+      // Server-rendered data (summary cards, group lists) reads prices too.
+      router.refresh()
       toast.success(`Updated ${formatIstTime(new Date())}`)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Network error'
@@ -71,41 +82,15 @@ export function RefreshButton() {
       onClick={handleRefresh}
       disabled={isRefreshing}
       aria-busy={isRefreshing}
+      aria-label="Refresh prices"
     >
-      {isRefreshing ? (
-        <>
-          <Spinner />
-          Refreshing…
-        </>
-      ) : (
-        'Refresh Prices'
-      )}
+      <RefreshCwIcon
+        className={cn('size-3.5', isRefreshing && 'animate-spin')}
+        aria-hidden="true"
+      />
+      <span className="hidden sm:inline">
+        {isRefreshing ? 'Refreshing…' : 'Refresh'}
+      </span>
     </Button>
-  )
-}
-
-function Spinner() {
-  return (
-    <svg
-      className="size-3 animate-spin"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="3"
-        opacity="0.25"
-      />
-      <path
-        d="M12 2a10 10 0 0 1 10 10"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-    </svg>
   )
 }

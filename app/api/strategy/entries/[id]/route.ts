@@ -3,15 +3,12 @@ import { isValidObjectId } from 'mongoose'
 
 import { connectDB } from '@/lib/db/connect'
 import { StrategyEntry } from '@/lib/db/models/StrategyEntry'
-import { strategyEntrySchema } from '@/lib/validation/schemas'
+import { StrategyGroup } from '@/lib/db/models/StrategyGroup'
+import { strategyEntryUpdateSchema } from '@/lib/validation/schemas'
 
 export const dynamic = 'force-dynamic'
 
 type RouteContext = { params: Promise<{ id: string }> }
-
-const editableFields = strategyEntrySchema
-  .partial()
-  .omit({ groupId: true, direction: true })
 
 export async function PATCH(request: Request, { params }: RouteContext) {
   await connectDB()
@@ -28,7 +25,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const parsed = editableFields.safeParse(body)
+  const parsed = strategyEntryUpdateSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'Validation failed', issues: parsed.error.issues },
@@ -45,6 +42,49 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       { error: 'Only pending entries can be edited' },
       { status: 409 },
     )
+  }
+
+  const merged = {
+    entryPrice: parsed.data.entryPrice ?? existing.entryPrice,
+    stopLoss: parsed.data.stopLoss ?? existing.stopLoss,
+    targetPrice: parsed.data.targetPrice ?? existing.targetPrice,
+    quantity: parsed.data.quantity ?? existing.quantity,
+  }
+
+  if (merged.stopLoss >= merged.entryPrice) {
+    return NextResponse.json(
+      { error: 'stopLoss must be below entryPrice for a long entry' },
+      { status: 400 },
+    )
+  }
+  if (merged.targetPrice <= merged.entryPrice) {
+    return NextResponse.json(
+      { error: 'targetPrice must be above entryPrice for a long entry' },
+      { status: 400 },
+    )
+  }
+
+  const group = await StrategyGroup.findById(existing.groupId).lean()
+  if (group) {
+    const otherOpenEntries = await StrategyEntry.find({
+      groupId: existing.groupId,
+      status: { $in: ['pending', 'active'] },
+      _id: { $ne: existing._id },
+    }).lean()
+
+    let capitalDeployed = 0
+    for (const e of otherOpenEntries) {
+      capitalDeployed += (e.entryPrice ?? 0) * (e.quantity ?? 0)
+    }
+    const capitalUsed = merged.entryPrice * merged.quantity
+    const capitalFree = group.allocatedCapital - capitalDeployed
+
+    if (capitalUsed > capitalFree) {
+      return NextResponse.json(
+        { error: 'Insufficient capital', capitalUsed, capitalFree },
+        { status: 409 },
+      )
+    }
   }
 
   Object.assign(existing, parsed.data)

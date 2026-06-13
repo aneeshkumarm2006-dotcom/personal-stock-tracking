@@ -9,6 +9,14 @@ import {
   Legend,
 } from 'recharts'
 
+import { formatCurrency } from '@/lib/format'
+import {
+  CHART_PALETTE,
+  legendStyle,
+  tooltipContentStyle,
+  tooltipItemStyle,
+} from './chartTheme'
+
 export type AllocationBySectorDatum = {
   sector: string
   currentValue: number
@@ -19,17 +27,9 @@ export type AllocationBySectorPieProps = {
   height?: number
 }
 
-const PALETTE = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--chart-4)',
-  'var(--chart-5)',
-]
-
 export function AllocationBySectorPie({
   data,
-  height = 320,
+  height = 280,
 }: AllocationBySectorPieProps) {
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -38,15 +38,22 @@ export function AllocationBySectorPie({
           data={data}
           dataKey="currentValue"
           nameKey="sector"
-          outerRadius="70%"
-          label
+          innerRadius="55%"
+          outerRadius="80%"
+          paddingAngle={2}
+          stroke="var(--card)"
+          strokeWidth={2}
         >
           {data.map((entry, idx) => (
-            <Cell key={entry.sector} fill={PALETTE[idx % PALETTE.length]} />
+            <Cell key={entry.sector} fill={CHART_PALETTE[idx % CHART_PALETTE.length]} />
           ))}
         </Pie>
-        <Tooltip />
-        <Legend />
+        <Tooltip
+          contentStyle={tooltipContentStyle}
+          itemStyle={tooltipItemStyle}
+          formatter={(value) => formatCurrency(Number(value))}
+        />
+        <Legend iconType="circle" iconSize={8} wrapperStyle={legendStyle} />
       </PieChart>
     </ResponsiveContainer>
   )

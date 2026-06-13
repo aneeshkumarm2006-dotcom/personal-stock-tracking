@@ -8,9 +8,18 @@ import {
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
-  Legend,
   ReferenceLine,
 } from 'recharts'
+
+import { formatCurrency } from '@/lib/format'
+import {
+  axisProps,
+  formatAxisInr,
+  gridProps,
+  tooltipContentStyle,
+  tooltipItemStyle,
+  tooltipLabelStyle,
+} from './chartTheme'
 
 export type PortfolioValueDatum = {
   date: string
@@ -25,33 +34,50 @@ export type PortfolioValueAreaProps = {
 
 export function PortfolioValueArea({
   data,
-  height = 320,
+  height = 280,
 }: PortfolioValueAreaProps) {
   const latestInvested = data.at(-1)?.totalInvested
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-        <YAxis tick={{ fontSize: 12 }} />
-        <Tooltip />
-        <Legend />
+      <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id="portfolioValueFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.18} />
+            <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid {...gridProps} />
+        <XAxis dataKey="date" {...axisProps} minTickGap={32} />
+        <YAxis {...axisProps} tickFormatter={formatAxisInr} width={52} />
+        <Tooltip
+          contentStyle={tooltipContentStyle}
+          labelStyle={tooltipLabelStyle}
+          itemStyle={tooltipItemStyle}
+          formatter={(value) => formatCurrency(Number(value))}
+        />
         {typeof latestInvested === 'number' && (
           <ReferenceLine
             y={latestInvested}
             strokeDasharray="4 4"
             stroke="var(--muted-foreground)"
-            label={{ value: 'Invested', position: 'right', fontSize: 11 }}
+            strokeOpacity={0.6}
+            label={{
+              value: 'Invested',
+              position: 'insideTopRight',
+              fontSize: 11,
+              fill: 'var(--muted-foreground)',
+            }}
           />
         )}
         <Area
           type="monotone"
           dataKey="totalValue"
           stroke="var(--chart-1)"
-          fill="var(--chart-1)"
-          fillOpacity={0.25}
+          strokeWidth={2}
+          fill="url(#portfolioValueFill)"
           name="Portfolio value"
+          activeDot={{ r: 3, strokeWidth: 0 }}
         />
       </AreaChart>
     </ResponsiveContainer>

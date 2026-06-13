@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   computeHoldings,
+  hasNegativeBalance,
+  type LedgerCheckTx,
   type TransactionForHoldings,
 } from '@/lib/portfolio/holdings'
 
@@ -103,5 +105,39 @@ describe('computeHoldings', () => {
     const b = result.find((r) => r.instrumentToken === '2')!
     expect(a.netQty).toBe(5)
     expect(b.netQty).toBe(5)
+  })
+})
+
+describe('hasNegativeBalance', () => {
+  const ledger = (
+    ...txs: Array<[type: 'BUY' | 'SELL', quantity: number, date: string]>
+  ): LedgerCheckTx[] => txs.map(([type, quantity, date]) => ({ type, quantity, date }))
+
+  it('returns false for a buy followed by a smaller sell', () => {
+    expect(
+      hasNegativeBalance(ledger(['BUY', 10, '2024-01-01'], ['SELL', 4, '2024-02-01'])),
+    ).toBe(false)
+  })
+
+  it('returns true when a sell exceeds the held quantity', () => {
+    expect(
+      hasNegativeBalance(ledger(['BUY', 10, '2024-01-01'], ['SELL', 11, '2024-02-01'])),
+    ).toBe(true)
+  })
+
+  it('returns true when a sell is dated before the buy that would cover it', () => {
+    expect(
+      hasNegativeBalance(ledger(['BUY', 10, '2024-02-01'], ['SELL', 5, '2024-01-01'])),
+    ).toBe(true)
+  })
+
+  it('keeps input order on equal dates (buy then sell same day is fine)', () => {
+    expect(
+      hasNegativeBalance(ledger(['BUY', 10, '2024-01-01'], ['SELL', 10, '2024-01-01'])),
+    ).toBe(false)
+  })
+
+  it('returns false for an empty ledger', () => {
+    expect(hasNegativeBalance([])).toBe(false)
   })
 })

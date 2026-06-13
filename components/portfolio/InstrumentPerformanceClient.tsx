@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
-import { Button } from '@/components/ui/button'
+import { EmptyState, ErrorState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   PriceHistoryLine,
@@ -110,30 +110,40 @@ export function InstrumentPerformanceClient({
   }, [transactionsQuery.data])
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-1">
+    <div className="space-y-4">
+      <div
+        role="group"
+        aria-label="Time range"
+        className="bg-muted inline-flex items-center gap-0.5 rounded-lg p-0.5"
+      >
         {(Object.keys(RANGE_DAYS) as RangeKey[]).map((key) => (
-          <Button
+          <button
             key={key}
             type="button"
-            variant={key === range ? 'default' : 'outline'}
-            size="sm"
-            className={cn(key === range && 'pointer-events-none')}
+            aria-pressed={key === range}
+            className={cn(
+              'rounded-md px-2.5 py-1 text-xs font-medium transition-colors outline-none',
+              'focus-visible:ring-ring/50 focus-visible:ring-2',
+              key === range
+                ? 'bg-card text-foreground shadow-xs'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
             onClick={() => setRange(key)}
           >
             {key}
-          </Button>
+          </button>
         ))}
       </div>
 
       {candlesQuery.isLoading ? (
-        <Skeleton className="h-[360px] w-full" />
+        <Skeleton className="h-[340px] w-full" />
       ) : candlesQuery.isError ? (
-        <p className="text-destructive text-sm">Unable to load price history.</p>
+        <ErrorState className="h-[340px]" message="Unable to load price history." />
       ) : series.length === 0 ? (
-        <div className="text-muted-foreground flex h-[360px] items-center justify-center rounded-md border border-dashed text-sm">
-          No price data returned for this range.
-        </div>
+        <EmptyState
+          className="h-[340px] min-h-0"
+          description="No price data returned for this range."
+        />
       ) : (
         <PriceHistoryLine data={series} buyMarkers={buyMarkers} />
       )}

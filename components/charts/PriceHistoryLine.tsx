@@ -1,17 +1,27 @@
 'use client'
 
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   Legend,
+  Line,
   Scatter,
   ComposedChart,
 } from 'recharts'
+
+import { formatCurrency } from '@/lib/format'
+import {
+  axisProps,
+  formatAxisInr,
+  gridProps,
+  legendStyle,
+  tooltipContentStyle,
+  tooltipItemStyle,
+  tooltipLabelStyle,
+} from './chartTheme'
 
 export type PriceHistoryCandle = {
   date: string
@@ -32,7 +42,7 @@ export type PriceHistoryLineProps = {
 export function PriceHistoryLine({
   data,
   buyMarkers = [],
-  height = 360,
+  height = 340,
 }: PriceHistoryLineProps) {
   const merged = data.map((candle) => {
     const buy = buyMarkers.find((m) => m.date === candle.date)
@@ -41,29 +51,33 @@ export function PriceHistoryLine({
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={merged} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-        <YAxis tick={{ fontSize: 12 }} domain={['auto', 'auto']} />
-        <Tooltip />
-        <Legend />
+      <ComposedChart data={merged} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid {...gridProps} />
+        <XAxis dataKey="date" {...axisProps} minTickGap={32} />
+        <YAxis
+          {...axisProps}
+          domain={['auto', 'auto']}
+          tickFormatter={formatAxisInr}
+          width={52}
+        />
+        <Tooltip
+          contentStyle={tooltipContentStyle}
+          labelStyle={tooltipLabelStyle}
+          itemStyle={tooltipItemStyle}
+          formatter={(value) => formatCurrency(Number(value))}
+        />
+        <Legend iconType="circle" iconSize={8} wrapperStyle={legendStyle} />
         <Line
           type="monotone"
           dataKey="close"
           stroke="var(--chart-1)"
           dot={false}
-          strokeWidth={2}
+          strokeWidth={1.5}
           name="Close price"
+          activeDot={{ r: 3, strokeWidth: 0 }}
         />
-        <Scatter
-          dataKey="buyPrice"
-          fill="var(--chart-2)"
-          name="Buy"
-          shape="circle"
-        />
+        <Scatter dataKey="buyPrice" fill="var(--gain)" name="Buy" shape="circle" />
       </ComposedChart>
     </ResponsiveContainer>
   )
 }
-
-export { LineChart }

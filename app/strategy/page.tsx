@@ -4,6 +4,8 @@ import { connectDB } from '@/lib/db/connect'
 import { StrategyGroup } from '@/lib/db/models/StrategyGroup'
 
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/PageHeader'
 import { CreateGroupDialog } from '@/components/strategy/CreateGroupDialog'
 import { GroupCard } from '@/components/strategy/GroupCard'
 
@@ -35,29 +37,29 @@ export default async function StrategyPage() {
   }))
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">
-            Strategy
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Plan trade ideas in groups. Entries are tracked against live LTP and
-            auto-transition through pending → active → tp/sl_hit.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" render={<Link href="/strategy/history" />}>
-            View history
-          </Button>
-          <CreateGroupDialog />
-        </div>
-      </header>
+    <div className="mx-auto w-full max-w-7xl space-y-8 px-4 py-6 sm:px-6 sm:py-8">
+      <PageHeader
+        title="Strategy"
+        description="Plan trade ideas in groups. Entries are tracked against live prices and close automatically at target or stop."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={<Link href="/strategy/history" />}
+            >
+              View history
+            </Button>
+            <CreateGroupDialog />
+          </>
+        }
+      />
 
       {groups.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-          No active strategy groups yet. Create one to start tracking trade ideas.
-        </div>
+        <EmptyState
+          title="No active strategy groups"
+          description="Create a group to start tracking trade ideas against a shared capital budget."
+        />
       ) : (
         <div className="space-y-4">
           {groups.map((group) => (

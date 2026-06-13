@@ -1,9 +1,11 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
+import { ChevronDownIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -116,6 +118,7 @@ export function AddTransactionDialog({
 
   const [chargesExpanded, setChargesExpanded] = useState(false)
   const queryClient = useQueryClient()
+  const router = useRouter()
 
   const defaultValues = useMemo<FormValues>(
     () => ({
@@ -194,8 +197,9 @@ export function AddTransactionDialog({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['holdings'] }),
         queryClient.invalidateQueries({ queryKey: ['transactions'] }),
-        queryClient.invalidateQueries({ queryKey: ['portfolio-summary'] }),
       ])
+      // The portfolio summary cards are server-rendered; re-render them too.
+      router.refresh()
       setOpen(false)
     } catch {
       toast.error('Network error')
@@ -217,7 +221,7 @@ export function AddTransactionDialog({
       {trigger ? (
         <DialogTrigger render={trigger as React.ReactElement} />
       ) : mode === 'create' ? (
-        <DialogTrigger render={<Button size="sm">Add transaction</Button>} />
+        <DialogTrigger render={<Button>Add transaction</Button>} />
       ) : null}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
@@ -227,8 +231,8 @@ export function AddTransactionDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
-          <div className="space-y-1">
+        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="space-y-1.5">
             <Label>Instrument</Label>
             <InstrumentTypeahead
               value={selectedInstrument}
@@ -242,7 +246,7 @@ export function AddTransactionDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="tx-type">Type</Label>
               <Select
                 value={form.watch('type')}
@@ -257,7 +261,7 @@ export function AddTransactionDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="tx-date">Date</Label>
               <Input id="tx-date" type="date" {...form.register('date')} />
               {form.formState.errors.date && (
@@ -267,7 +271,7 @@ export function AddTransactionDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="tx-qty">Quantity</Label>
               <Input
                 id="tx-qty"
@@ -283,7 +287,7 @@ export function AddTransactionDialog({
                 </p>
               )}
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label htmlFor="tx-price">Price (₹)</Label>
               <Input
                 id="tx-price"
@@ -301,21 +305,23 @@ export function AddTransactionDialog({
             </div>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <Label htmlFor="tx-notes">Notes</Label>
             <Input id="tx-notes" type="text" placeholder="Optional" {...form.register('notes')} />
           </div>
 
-          <div className="rounded-md border">
+          <div className="overflow-hidden rounded-lg border">
             <button
               type="button"
-              className="hover:bg-muted/40 flex w-full items-center justify-between px-3 py-2 text-sm"
+              aria-expanded={chargesExpanded}
+              className="hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-3 py-2 text-sm transition-colors"
               onClick={() => setChargesExpanded((v) => !v)}
             >
-              <span>Charges (brokerage, STT, GST, etc.)</span>
-              <span className="text-muted-foreground text-xs">
-                {chargesExpanded ? 'Hide' : 'Show'}
-              </span>
+              <span>Charges (brokerage, STT, GST…)</span>
+              <ChevronDownIcon
+                className={`text-muted-foreground size-3.5 shrink-0 transition-transform ${chargesExpanded ? 'rotate-180' : ''}`}
+                aria-hidden="true"
+              />
             </button>
             {chargesExpanded && (
               <div className="grid grid-cols-2 gap-3 border-t p-3 sm:grid-cols-3">
@@ -329,7 +335,7 @@ export function AddTransactionDialog({
                     ['sebiFees', 'SEBI Fees'],
                   ] as const
                 ).map(([name, label]) => (
-                  <div key={name} className="space-y-1">
+                  <div key={name} className="space-y-1.5">
                     <Label htmlFor={`tx-${name}`} className="text-xs">
                       {label}
                     </Label>

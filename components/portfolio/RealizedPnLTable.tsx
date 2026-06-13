@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
+import { EmptyState, ErrorState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -108,19 +109,24 @@ export function RealizedPnLTable() {
   }, [holdingsQuery.data, transactionsQuery.data])
 
   if (holdingsQuery.isLoading || transactionsQuery.isLoading) {
-    return <Skeleton className="h-32 w-full" />
+    return <Skeleton className="h-32 w-full rounded-lg" />
+  }
+
+  if (holdingsQuery.isError || transactionsQuery.isError) {
+    return <ErrorState message="Unable to load realized P&L." />
   }
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-        No realized P&L yet. Sell a holding to populate this table.
-      </div>
+      <EmptyState
+        title="No realized P&L"
+        description="Sell a holding to populate this table."
+      />
     )
   }
 
   return (
-    <div className="rounded-lg border">
+    <div className="bg-card overflow-hidden rounded-lg border">
       <Table>
         <TableHeader>
           <TableRow>

@@ -74,10 +74,7 @@ export async function refreshScripMaster(): Promise<number> {
   for (let i = 0; i < operations.length; i += BATCH) {
     const slice = operations.slice(i, i + BATCH)
     const result = await Instrument.bulkWrite(slice, { ordered: false })
-    upserted +=
-      (result.upsertedCount ?? 0) +
-      (result.modifiedCount ?? 0) +
-      (result.matchedCount ?? 0)
+    upserted += (result.upsertedCount ?? 0) + (result.modifiedCount ?? 0)
   }
 
   return upserted

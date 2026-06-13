@@ -37,6 +37,11 @@ export async function loadSession(): Promise<AngelSessionDoc | null> {
   return doc ?? null
 }
 
+export async function invalidateSession(): Promise<void> {
+  await connectDB()
+  await AngelSession.deleteOne({ _id: ANGEL_SESSION_SINGLETON_ID })
+}
+
 export async function saveSession(data: AngelTokens): Promise<void> {
   await connectDB()
   await AngelSession.findByIdAndUpdate(

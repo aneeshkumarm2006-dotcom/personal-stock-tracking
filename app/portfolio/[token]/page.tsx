@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { ArrowLeftIcon } from 'lucide-react'
 
 import { connectDB } from '@/lib/db/connect'
 import { Instrument } from '@/lib/db/models/Instrument'
@@ -17,8 +18,17 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import { InstrumentPerformanceClient } from '@/components/portfolio/InstrumentPerformanceClient'
 import { formatCurrency, formatInt, formatPercent, pnlColorClass } from '@/lib/format'
+import { cn } from '@/lib/utils'
+
+const STAT_CELL_BORDERS = [
+  'border-b border-r lg:border-b-0',
+  'border-b lg:border-r lg:border-b-0',
+  'border-r lg:border-r',
+  '',
+]
 
 export const dynamic = 'force-dynamic'
 
@@ -45,61 +55,73 @@ export default async function InstrumentPage({ params }: PageProps) {
   const enriched = enrichHoldings(holdings, snapshots)
   const holding = enriched[0]
 
+  const stats = holding
+    ? [
+        { label: 'Net quantity', value: formatInt(holding.netQty) },
+        { label: 'Avg buy price', value: formatCurrency(holding.avgBuyPrice) },
+        { label: 'Current value', value: formatCurrency(holding.currentValue) },
+        {
+          label: 'Unrealized P&L',
+          value: formatCurrency(holding.unrealizedPnL),
+          hint: formatPercent(holding.unrealizedPnLPct),
+          valueClass: pnlColorClass(holding.unrealizedPnL),
+        },
+      ]
+    : []
+
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
-      <header className="space-y-1">
+    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+      <header className="space-y-2">
         <Link
           href="/portfolio"
-          className="text-muted-foreground hover:text-foreground text-xs"
+          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs transition-colors"
         >
-          ← Back to portfolio
+          <ArrowLeftIcon className="size-3" aria-hidden="true" />
+          Back to portfolio
         </Link>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">
-          {instrument.symbol}
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          {instrument.name ?? instrument.symbol} · {exchange} · Token {token}
-        </p>
+        <div className="space-y-1">
+          <h1 className="font-heading text-xl font-semibold tracking-tight sm:text-2xl">
+            {instrument.symbol}
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            {instrument.name ?? instrument.symbol} · {exchange} · Token {token}
+          </p>
+        </div>
       </header>
 
       {holding ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Card size="sm">
-            <CardHeader>
-              <CardDescription>Net quantity</CardDescription>
-              <CardTitle>{formatInt(holding.netQty)}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card size="sm">
-            <CardHeader>
-              <CardDescription>Avg buy price</CardDescription>
-              <CardTitle>{formatCurrency(holding.avgBuyPrice)}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card size="sm">
-            <CardHeader>
-              <CardDescription>Current value</CardDescription>
-              <CardTitle>{formatCurrency(holding.currentValue)}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card size="sm">
-            <CardHeader>
-              <CardDescription>Unrealized P&L</CardDescription>
-              <CardTitle className={pnlColorClass(holding.unrealizedPnL)}>
-                {formatCurrency(holding.unrealizedPnL)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <span className={`text-xs ${pnlColorClass(holding.unrealizedPnLPct)}`}>
-                {formatPercent(holding.unrealizedPnLPct)}
-              </span>
-            </CardContent>
-          </Card>
-        </div>
+        <dl className="bg-card ring-foreground/10 grid grid-cols-2 overflow-hidden rounded-xl ring-1 lg:grid-cols-4">
+          {stats.map((s, idx) => (
+            <div key={s.label} className={cn('px-4 py-3.5', STAT_CELL_BORDERS[idx])}>
+              <dt className="text-muted-foreground text-xs">{s.label}</dt>
+              <dd className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
+                <span
+                  className={cn(
+                    'text-lg leading-tight font-semibold tracking-tight tabular-nums',
+                    s.valueClass
+                  )}
+                >
+                  {s.value}
+                </span>
+                {s.hint ? (
+                  <span
+                    className={cn(
+                      'text-xs font-medium tabular-nums',
+                      s.valueClass ?? 'text-muted-foreground'
+                    )}
+                  >
+                    {s.hint}
+                  </span>
+                ) : null}
+              </dd>
+            </div>
+          ))}
+        </dl>
       ) : (
-        <div className="text-muted-foreground rounded-lg border border-dashed p-6 text-center text-sm">
-          No transactions recorded for this instrument yet.
-        </div>
+        <EmptyState
+          title="No transactions yet"
+          description="Nothing has been recorded for this instrument."
+        />
       )}
 
       <Card>

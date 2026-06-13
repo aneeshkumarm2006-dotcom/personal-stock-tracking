@@ -1,11 +1,21 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { EmptyState, ErrorState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -62,6 +72,7 @@ function totalCharges(charges?: ApiCharges): number {
 
 export function TransactionHistoryTable() {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const [symbolFilter, setSymbolFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -93,8 +104,9 @@ export function TransactionHistoryTable() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['holdings'] }),
         queryClient.invalidateQueries({ queryKey: ['transactions'] }),
-        queryClient.invalidateQueries({ queryKey: ['portfolio-summary'] }),
       ])
+      // The portfolio summary cards are server-rendered; re-render them too.
+      router.refresh()
     },
     onError: (err: Error) => toast.error(err.message),
   })
@@ -139,15 +151,16 @@ export function TransactionHistoryTable() {
       </div>
 
       {query.isLoading ? (
-        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-48 w-full rounded-lg" />
       ) : query.isError ? (
-        <p className="text-destructive text-sm">Unable to load transactions.</p>
+        <ErrorState message="Unable to load transactions." />
       ) : rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No transactions match the filters.
-        </div>
+        <EmptyState
+          title="No transactions"
+          description="Nothing matches the current filters."
+        />
       ) : (
-        <div className="rounded-lg border">
+        <div className="bg-card overflow-hidden rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -167,7 +180,14 @@ export function TransactionHistoryTable() {
                   <TableCell>{formatIstDate(tx.date)}</TableCell>
                   <TableCell className="font-medium">{tx.instrumentSymbol ?? '—'}</TableCell>
                   <TableCell>
-                    <Badge variant={tx.type === 'BUY' ? 'default' : 'secondary'}>
+                    <Badge
+                      variant="outline"
+                      className={
+                        tx.type === 'BUY'
+                          ? 'bg-gain/10 text-gain border-transparent'
+                          : 'bg-loss/10 text-loss border-transparent'
+                      }
+                    >
                       {tx.type}
                     </Badge>
                   </TableCell>
@@ -230,10 +250,10 @@ export function TransactionHistoryTable() {
       {confirmDeleteId && (
         <DeleteConfirmDialog
           onCancel={() => setConfirmDeleteId(null)}
-          onConfirm={async () => {
+          onConfirm={() => {
             const id = confirmDeleteId
             setConfirmDeleteId(null)
-            await deleteMutation.mutateAsync(id)
+            deleteMutation.mutate(id)
           }}
         />
       )}
@@ -249,23 +269,28 @@ function DeleteConfirmDialog({
   onConfirm: () => void
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-popover text-popover-foreground w-full max-w-sm space-y-4 rounded-xl p-4 ring-1 ring-foreground/10">
-        <div className="space-y-1">
-          <h2 className="font-heading text-base font-medium">Delete transaction?</h2>
-          <p className="text-muted-foreground text-sm">
+    <Dialog
+      open={true}
+      onOpenChange={(next) => {
+        if (!next) onCancel()
+      }}
+    >
+      <DialogContent className="sm:max-w-sm" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Delete transaction?</DialogTitle>
+          <DialogDescription>
             This permanently removes the entry. Realized P&L will recompute.
-          </p>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onCancel}>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={onConfirm}>
+          <Button type="button" variant="destructive" onClick={onConfirm}>
             Delete
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

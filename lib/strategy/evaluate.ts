@@ -54,30 +54,44 @@ export async function evaluateEntries(
     if (ltp === undefined) continue
     evaluated += 1
 
-    if (entry.status === 'pending') {
-      if (ltp <= entry.entryPrice) {
-        entry.status = 'active'
-        entry.events.push({ type: 'entry_hit', price: ltp, timestamp: now })
+    // A failed save must not abort evaluation of the remaining entries; the
+    // unsaved transition is retried on the next refresh cycle.
+    try {
+      if (entry.status === 'pending') {
+        if (ltp <= entry.entryPrice) {
+          entry.status = 'active'
+          entry.events.push({ type: 'entry_hit', price: ltp, timestamp: now })
+          await entry.save()
+          transitioned += 1
+        }
+        continue
+      }
+
+      // active — TP takes precedence over SL when both could trigger
+      if (ltp >= entry.targetPrice) {
+        entry.status = 'tp_hit'
+        entry.events.push({ type: 'tp_hit', price: ltp, timestamp: now })
+        await entry.save()
+        transitioned += 1
+        continue
+      }
+
+      if (ltp <= entry.stopLoss) {
+        entry.status = 'sl_hit'
+        entry.events.push({ type: 'sl_hit', price: ltp, timestamp: now })
         await entry.save()
         transitioned += 1
       }
-      continue
-    }
-
-    // active — TP takes precedence over SL when both could trigger
-    if (ltp >= entry.targetPrice) {
-      entry.status = 'tp_hit'
-      entry.events.push({ type: 'tp_hit', price: ltp, timestamp: now })
-      await entry.save()
-      transitioned += 1
-      continue
-    }
-
-    if (ltp <= entry.stopLoss) {
-      entry.status = 'sl_hit'
-      entry.events.push({ type: 'sl_hit', price: ltp, timestamp: now })
-      await entry.save()
-      transitioned += 1
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.log(
+        JSON.stringify({
+          event: 'strategy.evaluate',
+          status: 'error',
+          token: entry.instrumentToken,
+          message,
+        }),
+      )
     }
   }
 
