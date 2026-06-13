@@ -11,6 +11,7 @@ const instrumentSchema = new Schema(
 )
 
 instrumentSchema.index({ symbol: 1 })
+instrumentSchema.index({ name: 1 })
 
 export type InstrumentDoc = InferSchemaType<typeof instrumentSchema>
 

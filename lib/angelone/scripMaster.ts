@@ -6,6 +6,69 @@ import { NetworkError } from './errors'
 const SCRIP_MASTER_URL =
   'https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json'
 
+// NSE's official equity list maps each trading symbol to the full company name.
+// AngelOne's scrip master only carries the short symbol in its `name` field, so we
+// enrich from here to make searching by company name (e.g. "state bank" -> SBIN) work.
+const NSE_EQUITY_LIST_URL =
+  'https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv'
+
+// Trading symbols in the scrip master are suffixed (e.g. "SBIN-EQ"); NSE's list keys
+// on the bare symbol ("SBIN"). Strip the suffix to line the two up.
+function baseSymbol(symbol: string): string {
+  const dash = symbol.lastIndexOf('-')
+  return (dash === -1 ? symbol : symbol.slice(0, dash)).toUpperCase()
+}
+
+/**
+ * Parse NSE's EQUITY_L.csv into a `symbol -> company name` map.
+ * The file is unquoted CSV (company names never contain commas), so a plain
+ * split on the first two commas is sufficient and robust.
+ */
+export function parseNseCompanyNames(csv: string): Map<string, string> {
+  const map = new Map<string, string>()
+  const lines = csv.split(/\r?\n/)
+  // Skip the header row (index 0).
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i]?.trim()
+    if (!line) continue
+    const firstComma = line.indexOf(',')
+    if (firstComma === -1) continue
+    const symbol = line.slice(0, firstComma).trim().toUpperCase()
+    const rest = line.slice(firstComma + 1)
+    const secondComma = rest.indexOf(',')
+    const name = (secondComma === -1 ? rest : rest.slice(0, secondComma)).trim()
+    if (symbol && name) map.set(symbol, name)
+  }
+  return map
+}
+
+/** Resolve the best display/search name for an instrument, preferring NSE company names. */
+export function resolveInstrumentName(
+  symbol: string,
+  angelName: string | undefined,
+  companyNames: Map<string, string>,
+): string {
+  return companyNames.get(baseSymbol(symbol)) ?? angelName ?? symbol
+}
+
+// Best-effort fetch of NSE company names. Enrichment failures must not break the
+// scrip-master refresh, so any error falls back to an empty map (AngelOne short names).
+async function fetchNseCompanyNames(): Promise<Map<string, string>> {
+  try {
+    const response = await fetch(NSE_EQUITY_LIST_URL, {
+      headers: {
+        // NSE rejects requests without a browser-like User-Agent.
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        Accept: 'text/csv,*/*',
+      },
+    })
+    if (!response.ok) return new Map()
+    return parseNseCompanyNames(await response.text())
+  } catch {
+    return new Map()
+  }
+}
+
 type RawScripRow = {
   token?: string
   symbol?: string
@@ -42,6 +105,8 @@ export async function refreshScripMaster(): Promise<number> {
     throw new NetworkError('Scrip master response was not an array')
   }
 
+  const companyNames = await fetchNseCompanyNames()
+
   const operations = rows
     .filter((row) => {
       const exchange = pickExchange(row.exch_seg)
@@ -58,7 +123,7 @@ export async function refreshScripMaster(): Promise<number> {
             $set: {
               token: row.token!,
               symbol: row.symbol!,
-              name: row.name ?? row.symbol!,
+              name: resolveInstrumentName(row.symbol!, row.name, companyNames),
               exchange,
             },
           },
