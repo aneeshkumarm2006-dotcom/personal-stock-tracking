@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import {
@@ -34,12 +35,73 @@ export type HoldingsTableProps = {
   initialData?: HoldingsResponse
 }
 
+type SortKey =
+  | 'instrumentSymbol'
+  | 'netQty'
+  | 'avgBuyPrice'
+  | 'totalInvested'
+  | 'currentPrice'
+  | 'currentValue'
+  | 'unrealizedPnL'
+  | 'unrealizedPnLPct'
+  | 'dayChangePct'
+
+type SortDir = 'asc' | 'desc'
+
+// `key: null` columns are not sortable (e.g. Tags). `right` columns are numeric.
+const COLUMNS: { label: string; key: SortKey | null; align?: 'right' }[] = [
+  { label: 'Symbol', key: 'instrumentSymbol' },
+  { label: 'Tags', key: null },
+  { label: 'Qty', key: 'netQty', align: 'right' },
+  { label: 'Avg Buy Price', key: 'avgBuyPrice', align: 'right' },
+  { label: 'Invested', key: 'totalInvested', align: 'right' },
+  { label: 'Current Price', key: 'currentPrice', align: 'right' },
+  { label: 'Current Value', key: 'currentValue', align: 'right' },
+  { label: 'Unrealized P&L', key: 'unrealizedPnL', align: 'right' },
+  { label: 'Unrealized %', key: 'unrealizedPnLPct', align: 'right' },
+  { label: 'Day %', key: 'dayChangePct', align: 'right' },
+]
+
+// Sorts by the chosen column, always pushing null/missing values to the end
+// regardless of direction.
+function compareHoldings(a: HoldingWithTags, b: HoldingWithTags, key: SortKey, dir: SortDir): number {
+  const av = a[key]
+  const bv = b[key]
+  if (av == null && bv == null) return 0
+  if (av == null) return 1
+  if (bv == null) return -1
+  const sign = dir === 'asc' ? 1 : -1
+  if (typeof av === 'string' && typeof bv === 'string') {
+    return av.localeCompare(bv) * sign
+  }
+  return ((av as number) - (bv as number)) * sign
+}
+
 export function HoldingsTable({ initialData }: HoldingsTableProps) {
   const query = useQuery({
     queryKey: ['holdings'],
     queryFn: fetchHoldings,
     initialData,
   })
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+  const openHoldings = useMemo(() => {
+    const open = (query.data?.holdings ?? []).filter((h) => !h.isClosed)
+    if (!sortKey) return open
+    return [...open].sort((a, b) => compareHoldings(a, b, sortKey, sortDir))
+  }, [query.data, sortKey, sortDir])
+
+  // First click on a column sorts ascending; clicking the active column again
+  // toggles to descending and back.
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
 
   if (query.isLoading) {
     return <Skeleton className="h-64 w-full rounded-lg" />
@@ -49,9 +111,7 @@ export function HoldingsTable({ initialData }: HoldingsTableProps) {
     return <ErrorState message="Unable to load holdings." />
   }
 
-  const data = query.data
-  const openHoldings = (data?.holdings ?? []).filter((h) => !h.isClosed)
-  const lastUpdated = data?.oldestFetchedAt ?? null
+  const lastUpdated = query.data?.oldestFetchedAt ?? null
 
   if (openHoldings.length === 0) {
     return (
@@ -68,16 +128,20 @@ export function HoldingsTable({ initialData }: HoldingsTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Symbol</TableHead>
-              <TableHead>Tags</TableHead>
-              <TableHead className="text-right">Qty</TableHead>
-              <TableHead className="text-right">Avg Buy Price</TableHead>
-              <TableHead className="text-right">Invested</TableHead>
-              <TableHead className="text-right">Current Price</TableHead>
-              <TableHead className="text-right">Current Value</TableHead>
-              <TableHead className="text-right">Unrealized P&L</TableHead>
-              <TableHead className="text-right">Unrealized %</TableHead>
-              <TableHead className="text-right">Day %</TableHead>
+              {COLUMNS.map(({ label, key, align }) => (
+                <TableHead
+                  key={label}
+                  className={[
+                    align === 'right' ? 'text-right' : '',
+                    key ? 'cursor-pointer select-none' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  onClick={key ? () => handleSort(key) : undefined}
+                >
+                  {label}
+                </TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
