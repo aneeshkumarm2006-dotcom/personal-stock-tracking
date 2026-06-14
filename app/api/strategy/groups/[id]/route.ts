@@ -132,5 +132,8 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: 'Group not found' }, { status: 404 })
   }
 
-  return NextResponse.json({ deleted: true })
+  // Remove the group's entries too so no orphaned history data remains.
+  const { deletedCount } = await StrategyEntry.deleteMany({ groupId: id })
+
+  return NextResponse.json({ deleted: true, entriesDeleted: deletedCount ?? 0 })
 }
