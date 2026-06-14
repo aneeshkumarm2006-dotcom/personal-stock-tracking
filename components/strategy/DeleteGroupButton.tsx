@@ -52,13 +52,13 @@ export function DeleteGroupButton({ groupId, groupName }: DeleteGroupButtonProps
   return (
     <>
       <Button
-        size="sm"
+        size="icon"
         variant="outline"
-        className="text-destructive hover:text-destructive gap-1.5"
+        className="text-destructive hover:text-destructive"
         onClick={() => setConfirmOpen(true)}
+        aria-label="Delete strategy group"
       >
-        <Trash2Icon className="size-3.5" aria-hidden="true" />
-        Delete
+        <Trash2Icon className="size-4" aria-hidden="true" />
       </Button>
 
       <Dialog

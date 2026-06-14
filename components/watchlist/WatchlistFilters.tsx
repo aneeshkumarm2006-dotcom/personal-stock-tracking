@@ -28,6 +28,30 @@ const SORT_LABELS: Record<SortKey, string> = {
   recentlyTriggered: 'Recently triggered',
 }
 
+// `items` maps the option value to its label so <SelectValue> shows the label
+// (e.g. "All exchanges") instead of the raw value ("all") before the popup
+// has ever opened.
+const EXCHANGE_ITEMS: Record<string, string> = {
+  all: 'All exchanges',
+  NSE: 'NSE',
+  BSE: 'BSE',
+}
+
+const CONVICTION_ITEMS: Record<string, string> = {
+  all: 'Any conviction',
+  watching: 'Watching',
+  interested: 'Interested',
+  high: 'High',
+}
+
+const ALERT_ITEMS: Record<string, string> = {
+  any: 'Any alerts',
+  armed: 'Has armed',
+  triggered: 'Triggered',
+  snoozed: 'Snoozed',
+  none: 'No alerts',
+}
+
 export type WatchlistFiltersProps = {
   filters: WatchlistFilterState
   onChange: (next: WatchlistFilterState) => void
@@ -53,24 +77,33 @@ export function WatchlistFilters({
     })
   }
 
+  const sectorItems: Record<string, string> = {
+    all: 'All sectors',
+    ...Object.fromEntries(sectors.map((s) => [s, s])),
+  }
+
   return (
     <div className="bg-card space-y-3 rounded-lg border p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-48 flex-1">
-          <SearchIcon
-            className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
-            aria-hidden="true"
-          />
-          <Input
-            type="search"
-            value={filters.search}
-            onChange={(e) => set({ search: e.target.value })}
-            placeholder="Search symbol or name"
-            className="pl-8"
-          />
-        </div>
+      <div className="relative">
+        <SearchIcon
+          className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+          aria-hidden="true"
+        />
+        <Input
+          type="search"
+          value={filters.search}
+          onChange={(e) => set({ search: e.target.value })}
+          placeholder="Search symbol or name"
+          className="pl-8"
+        />
+      </div>
 
-        <Select value={filters.exchange} onValueChange={(v) => set({ exchange: v as WatchlistFilterState['exchange'] })}>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Select
+          items={EXCHANGE_ITEMS}
+          value={filters.exchange}
+          onValueChange={(v) => set({ exchange: v as WatchlistFilterState['exchange'] })}
+        >
           <SelectTrigger aria-label="Exchange">
             <SelectValue />
           </SelectTrigger>
@@ -81,7 +114,11 @@ export function WatchlistFilters({
           </SelectContent>
         </Select>
 
-        <Select value={filters.sector} onValueChange={(v) => set({ sector: v ?? 'all' })}>
+        <Select
+          items={sectorItems}
+          value={filters.sector}
+          onValueChange={(v) => set({ sector: v ?? 'all' })}
+        >
           <SelectTrigger aria-label="Sector">
             <SelectValue />
           </SelectTrigger>
@@ -96,6 +133,7 @@ export function WatchlistFilters({
         </Select>
 
         <Select
+          items={CONVICTION_ITEMS}
           value={filters.conviction}
           onValueChange={(v) => set({ conviction: v as WatchlistFilterState['conviction'] })}
         >
@@ -111,6 +149,7 @@ export function WatchlistFilters({
         </Select>
 
         <Select
+          items={ALERT_ITEMS}
           value={filters.alertStatus}
           onValueChange={(v) => set({ alertStatus: v as WatchlistFilterState['alertStatus'] })}
         >
@@ -160,7 +199,7 @@ export function WatchlistFilters({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-3">
         <label className="flex items-center gap-1.5 text-sm">
           <input
             type="checkbox"
@@ -206,6 +245,7 @@ export function WatchlistFilters({
         <div className="ml-auto flex items-center gap-1.5">
           <Label className="text-muted-foreground text-xs">Sort</Label>
           <Select
+            items={SORT_LABELS}
             value={filters.sortKey}
             onValueChange={(v) => set({ sortKey: v as SortKey })}
           >

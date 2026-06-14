@@ -209,25 +209,23 @@ export default async function StrategyHistoryPage() {
                         {entries.length === 1 ? 'entry' : 'entries'}
                       </CardDescription>
                     </div>
-                    <div className="flex items-start gap-6">
-                      <dl className="flex items-start gap-6">
-                        <div>
-                          <dt className="text-muted-foreground text-xs">Win rate</dt>
-                          <dd className="text-sm font-medium tabular-nums">
-                            {winRate.toFixed(0)}%
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground text-xs">Net result</dt>
-                          <dd
-                            className={`text-sm font-medium tabular-nums ${pnlColorClass(netResult)}`}
-                          >
-                            {formatCurrency(netResult)}
-                          </dd>
-                        </div>
-                      </dl>
+                    <dl className="flex items-center gap-6">
+                      <div>
+                        <dt className="text-muted-foreground text-xs">Win rate</dt>
+                        <dd className="text-sm font-medium tabular-nums">
+                          {winRate.toFixed(0)}%
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground text-xs">Net result</dt>
+                        <dd
+                          className={`text-sm font-medium tabular-nums ${pnlColorClass(netResult)}`}
+                        >
+                          {formatCurrency(netResult)}
+                        </dd>
+                      </div>
                       <DeleteGroupButton groupId={id} groupName={g.name} />
-                    </div>
+                    </dl>
                   </div>
                 </CardHeader>
 
