@@ -164,16 +164,23 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <dl className="bg-border grid grid-cols-3 gap-px overflow-hidden rounded-lg border sm:grid-cols-6">
-          <Stat label="Pending" value={counts.pending} />
-          <Stat label="Active" value={counts.active} />
-          <Stat label="Partial" value={counts.partial} />
-          <Stat label="Trailing" value={counts.trailing} />
-          <Stat label="TP hit" value={counts.tp_hit} valueClass="text-gain" />
-          <Stat label="Trail hit" value={counts.trail_hit} valueClass="text-gain" />
-          <Stat label="SL hit" value={counts.sl_hit} valueClass="text-loss" />
-          <Stat label="Closed" value={counts.closed_manual} />
-          <Stat label="Win rate" value={`${winRatePct.toFixed(0)}%`} />
+        <dl className="space-y-3">
+          <div className="bg-card flex items-baseline justify-between rounded-lg border px-4 py-3">
+            <dt className="text-muted-foreground text-sm font-medium">Win rate</dt>
+            <dd className="text-2xl font-semibold tabular-nums leading-none">
+              {`${winRatePct.toFixed(0)}%`}
+            </dd>
+          </div>
+          <div className="bg-border grid grid-cols-2 gap-px overflow-hidden rounded-lg border sm:grid-cols-4">
+            <Stat label="Pending" value={counts.pending} />
+            <Stat label="Active" value={counts.active} />
+            <Stat label="Partial" value={counts.partial} />
+            <Stat label="Trailing" value={counts.trailing} />
+            <Stat label="TP hit" value={counts.tp_hit} valueClass="text-gain" />
+            <Stat label="Trail hit" value={counts.trail_hit} valueClass="text-gain" />
+            <Stat label="SL hit" value={counts.sl_hit} valueClass="text-loss" />
+            <Stat label="Closed" value={counts.closed_manual} />
+          </div>
         </dl>
 
         <EntriesTable
