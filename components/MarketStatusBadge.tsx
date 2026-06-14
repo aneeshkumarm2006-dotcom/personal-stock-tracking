@@ -5,13 +5,14 @@ import { useQuery } from '@tanstack/react-query'
 
 import { Badge } from '@/components/ui/badge'
 import { formatIstTime } from '@/lib/format'
+import type { EnrichedHolding } from '@/lib/portfolio/summary'
 import { isMarketOpen } from '@/lib/time/marketHours'
 
 // Shares the ['holdings'] query with HoldingsTable/PortfolioCharts, so the
 // fetcher must return the full response shape — a narrower payload here would
 // overwrite the shared cache entry and blank out the holdings table.
 type HoldingsResponse = {
-  holdings: unknown[]
+  holdings: EnrichedHolding[]
   oldestFetchedAt: string | null
 }
 
@@ -33,6 +34,64 @@ function getIstTime() {
   const get = (type: string) =>
     Number(parts.find((p) => p.type === type)?.value ?? 0)
   return { hours: get('hour'), minutes: get('minute'), seconds: get('second') }
+}
+
+// Value-weighted day direction: positive when the portfolio is up on the day.
+// Holdings without a live day-change snapshot are skipped; defaults to "up"
+// (neutral green) when there's nothing to measure yet.
+function isPortfolioUp(holdings: EnrichedHolding[]): boolean {
+  let weighted = 0
+  for (const h of holdings) {
+    if (h.dayChangePct == null) continue
+    weighted += h.currentValue * h.dayChangePct
+  }
+  return weighted >= 0
+}
+
+// A tiny live ticker line: a zigzag that scrolls sideways while gently bobbing,
+// tilted up (green) when the portfolio is up on the day and down (red) when not.
+function MarketTrendChart({ up }: { up: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 16"
+      className={`h-4 w-6 shrink-0 ${up ? 'text-gain' : 'text-loss'}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {/* static tilt sets the up/down trend slope */}
+      <g transform={up ? 'rotate(-12 12 8)' : 'rotate(12 12 8)'}>
+        {/* gentle directional bob */}
+        <g>
+          <animateTransform
+            attributeName="transform"
+            type="translate"
+            values={up ? '0 1; 0 -1; 0 1' : '0 -1; 0 1; 0 -1'}
+            keyTimes="0; 0.5; 1"
+            dur="5s"
+            calcMode="spline"
+            keySplines="0.4 0 0.6 1; 0.4 0 0.6 1"
+            repeatCount="indefinite"
+          />
+          {/* seamless sideways scroll (shifts exactly two zigzag periods) */}
+          <g>
+            <animateTransform
+              attributeName="transform"
+              type="translate"
+              from="0 0"
+              to="-16 0"
+              dur="4s"
+              repeatCount="indefinite"
+            />
+            <polyline points="-16,8 -12,4 -8,8 -4,4 0,8 4,4 8,8 12,4 16,8 20,4 24,8 28,4 32,8 36,4 40,8" />
+          </g>
+        </g>
+      </g>
+    </svg>
+  )
 }
 
 // Tiny analog clock whose hands track the real IST time, ticking each second.
@@ -119,12 +178,10 @@ export function MarketStatusBadge() {
   })
 
   if (open) {
+    const up = isPortfolioUp(lastUpdatedQuery.data?.holdings ?? [])
     return (
       <Badge variant="outline" className="text-foreground gap-1.5">
-        <span className="relative flex size-1.5" aria-hidden="true">
-          <span className="bg-gain/60 absolute inline-flex h-full w-full animate-ping rounded-full" />
-          <span className="bg-gain relative inline-flex size-1.5 rounded-full" />
-        </span>
+        <MarketTrendChart up={up} />
         Market open
       </Badge>
     )
