@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/PageHeader'
 import { CreateGroupDialog } from '@/components/strategy/CreateGroupDialog'
-import { GroupCard } from '@/components/strategy/GroupCard'
-import { StrategyLivePrices } from '@/components/strategy/StrategyLivePrices'
+import { StrategyGroupList } from '@/components/strategy/StrategyGroupList'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,16 +61,7 @@ export default async function StrategyPage() {
           description="Create a group to start tracking trade ideas against a shared capital budget."
         />
       ) : (
-        <div className="space-y-4">
-          <StrategyLivePrices />
-          {groups.map((group) => (
-            <GroupCard
-              key={group._id}
-              groupId={group._id}
-              initialGroup={group}
-            />
-          ))}
-        </div>
+        <StrategyGroupList groups={groups} />
       )}
     </div>
   )

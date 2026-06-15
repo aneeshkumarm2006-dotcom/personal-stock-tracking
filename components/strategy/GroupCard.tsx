@@ -220,6 +220,7 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
           groupId={groupId}
           entries={stats.entries}
           allowClose={group.status === 'active'}
+          capitalFree={stats.capitalFree}
         />
       </CardContent>
 

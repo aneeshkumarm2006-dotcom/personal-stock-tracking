@@ -16,11 +16,14 @@ import {
 import { formatCurrency, formatInt, pnlColorClass } from '@/lib/format'
 import type { EntryStats } from '@/lib/strategy/group'
 import { ManualCloseDialog } from './ManualCloseDialog'
+import { EditEntryDialog } from './EditEntryDialog'
 
 export type EntriesTableProps = {
   groupId: string
   entries: EntryStats[]
   allowClose?: boolean
+  // Free capital in the group, used to validate edits to pending entries.
+  capitalFree?: number
 }
 
 type StatusDisplay = {
@@ -102,8 +105,14 @@ function statusDisplay(entry: EntryStats): StatusDisplay {
   }
 }
 
-export function EntriesTable({ groupId, entries, allowClose = true }: EntriesTableProps) {
+export function EntriesTable({
+  groupId,
+  entries,
+  allowClose = true,
+  capitalFree = 0,
+}: EntriesTableProps) {
   const [closing, setClosing] = useState<EntryStats | null>(null)
+  const [editing, setEditing] = useState<EntryStats | null>(null)
 
   if (entries.length === 0) {
     return (
@@ -144,6 +153,8 @@ export function EntriesTable({ groupId, entries, allowClose = true }: EntriesTab
                 e.status === 'active' ||
                 e.status === 'partial' ||
                 e.status === 'trailing'
+              // Only entries that haven't filled yet can have their levels edited.
+              const canEdit = e.status === 'pending'
               const stopMoved = e.activeStop !== e.stopLoss
               const key = e.id ?? `${e.instrumentToken}-${e.entryPrice}`
               return (
@@ -188,10 +199,27 @@ export function EntriesTable({ groupId, entries, allowClose = true }: EntriesTab
                   </TableCell>
                   {allowClose && (
                     <TableCell className="text-right">
-                      {canClose && e.id ? (
-                        <Button size="xs" variant="outline" onClick={() => setClosing(e)}>
-                          Close
-                        </Button>
+                      {e.id && (canClose || canEdit) ? (
+                        <div className="flex justify-end gap-1.5">
+                          {canEdit && (
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => setEditing(e)}
+                            >
+                              Edit
+                            </Button>
+                          )}
+                          {canClose && (
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => setClosing(e)}
+                            >
+                              Close
+                            </Button>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-muted-foreground text-xs">—</span>
                       )}
@@ -211,6 +239,17 @@ export function EntriesTable({ groupId, entries, allowClose = true }: EntriesTab
           symbol={closing.instrumentSymbol || closing.instrumentToken}
           currentPrice={closing.currentPrice}
           onClose={() => setClosing(null)}
+        />
+      )}
+
+      {editing && editing.id && (
+        <EditEntryDialog
+          entry={editing}
+          groupId={groupId}
+          // This entry's own capital is freed when re-allocated, so it's
+          // available again on top of the group's free capital.
+          capitalAvailable={capitalFree + editing.capitalUsed}
+          onClose={() => setEditing(null)}
         />
       )}
     </div>
