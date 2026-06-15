@@ -68,16 +68,34 @@ function isEmpty(tokens: ExchangeTokens): boolean {
   return nse + bse === 0
 }
 
-export async function getQuotes(
-  exchangeTokens: ExchangeTokens,
+// Angel One's quote endpoint accepts at most 50 tokens per request (counted
+// across all exchanges). Split the requested tokens into batches that respect
+// this cap so a large, fully-live watchlist doesn't silently drop quotes.
+const MAX_TOKENS_PER_REQUEST = 50
+
+function chunkExchangeTokens(tokens: ExchangeTokens): ExchangeTokens[] {
+  // Flatten to (exchange, token) pairs, then re-group into batches of <=50.
+  const pairs: Array<['NSE' | 'BSE', string]> = []
+  for (const t of tokens.NSE ?? []) pairs.push(['NSE', t])
+  for (const t of tokens.BSE ?? []) pairs.push(['BSE', t])
+
+  const batches: ExchangeTokens[] = []
+  for (let i = 0; i < pairs.length; i += MAX_TOKENS_PER_REQUEST) {
+    const slice = pairs.slice(i, i + MAX_TOKENS_PER_REQUEST)
+    const batch: ExchangeTokens = {}
+    for (const [exchange, token] of slice) {
+      ;(batch[exchange] ??= []).push(token)
+    }
+    batches.push(batch)
+  }
+  return batches
+}
+
+async function fetchBatch(
+  payload: Record<string, string[]>,
   mode: QuoteMode,
+  fetchedAt: Date,
 ): Promise<PriceSnapshotData[]> {
-  if (isEmpty(exchangeTokens)) return []
-
-  const payload: Record<string, string[]> = {}
-  if (exchangeTokens.NSE?.length) payload.NSE = exchangeTokens.NSE
-  if (exchangeTokens.BSE?.length) payload.BSE = exchangeTokens.BSE
-
   const client = getSmartApi()
 
   const response = await withRetry(
@@ -91,7 +109,6 @@ export async function getQuotes(
     { event: 'angelone.marketData' },
   )
 
-  const fetchedAt = new Date()
   const data = response.data as
     | { fetched?: RawQuoteRow[]; unfetched?: unknown[] }
     | RawQuoteRow[]
@@ -119,6 +136,27 @@ export async function getQuotes(
   for (const row of rows) {
     const snap = normalize(row, fetchedAt)
     if (snap) result.push(snap)
+  }
+  return result
+}
+
+export async function getQuotes(
+  exchangeTokens: ExchangeTokens,
+  mode: QuoteMode,
+): Promise<PriceSnapshotData[]> {
+  if (isEmpty(exchangeTokens)) return []
+
+  const batches = chunkExchangeTokens(exchangeTokens)
+  const fetchedAt = new Date()
+
+  // Run batches sequentially: a single account rarely needs more than one batch,
+  // and sequencing keeps us comfortably under the per-second quote rate limit.
+  const result: PriceSnapshotData[] = []
+  for (const batch of batches) {
+    const payload: Record<string, string[]> = {}
+    if (batch.NSE?.length) payload.NSE = batch.NSE
+    if (batch.BSE?.length) payload.BSE = batch.BSE
+    result.push(...(await fetchBatch(payload, mode, fetchedAt)))
   }
   return result
 }

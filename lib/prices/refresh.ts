@@ -66,11 +66,14 @@ export async function collectStrategyTokens(): Promise<Set<string>> {
   return set
 }
 
-// Only watchlist items with at least one ARMED alert need a live price (saves
-// quota); items with no active alert can be priced lazily on page open.
-async function collectWatchlistAlertTokens(): Promise<Set<string>> {
+// Every watchlist row is priced live so the open page reflects fresh quotes for
+// all items, not just those with an armed alert. Alert *evaluation* still only
+// touches armed alerts (see fetchAlertableWatchlistItems); this collector only
+// widens which tokens get a fresh quote. The token count feeds the quote batch,
+// which getQuotes chunks under Angel One's 50-per-request cap.
+async function collectWatchlistTokens(): Promise<Set<string>> {
   const docs = await WatchlistItem.find(
-    { 'alerts.status': 'armed' },
+    {},
     { instrumentToken: 1, _id: 0 },
   ).lean()
   const set = new Set<string>()
@@ -168,7 +171,7 @@ export async function runRefreshCycle(): Promise<RefreshResult> {
     await Promise.all([
       collectOpenHoldingTokens(),
       collectStrategyTokens(),
-      collectWatchlistAlertTokens(),
+      collectWatchlistTokens(),
       collectHoldingAlertTokens(),
     ])
   const union = new Set<string>([
@@ -195,15 +198,16 @@ export async function runRefreshCycle(): Promise<RefreshResult> {
       durationMs: Date.now() - startedAt,
     }
   }
-  // Angel One quotes accept up to 50 tokens per request. A personal account
-  // stays well under this; warn (don't fail) if it ever approaches the cap so
-  // the fetch layer can be taught to chunk before quotes start dropping.
+  // Angel One quotes accept up to 50 tokens per request; getQuotes chunks larger
+  // sets into multiple requests automatically. Log when that kicks in so the
+  // extra quote calls are visible if quota ever becomes a concern.
   if (totalTokens > 50) {
     console.log(
       JSON.stringify({
         event: 'prices.refresh',
-        status: 'token-cap-warning',
+        status: 'multi-batch',
         total: totalTokens,
+        batches: Math.ceil(totalTokens / 50),
       }),
     )
   }

@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AddToWatchlistDialog } from '@/components/watchlist/AddToWatchlistDialog'
 import { TriggeredAlertsFeed } from '@/components/watchlist/TriggeredAlertsFeed'
+import { WatchlistLivePrices } from '@/components/watchlist/WatchlistLivePrices'
 import { WatchlistView } from '@/components/watchlist/WatchlistView'
 
 export const dynamic = 'force-dynamic'
@@ -58,6 +59,8 @@ export default async function WatchlistPage() {
         description={summary}
         actions={<AddToWatchlistDialog />}
       />
+
+      <WatchlistLivePrices />
 
       <Suspense fallback={<Skeleton className="h-64 w-full rounded-lg" />}>
         <WatchlistView />
