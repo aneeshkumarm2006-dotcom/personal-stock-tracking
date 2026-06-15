@@ -27,6 +27,7 @@ import { formatCurrency } from '@/lib/format'
 import type { GroupStats } from '@/lib/strategy/group'
 import { EntriesTable } from './EntriesTable'
 import { AddEntryDialog } from './AddEntryDialog'
+import { EditGroupDialog } from './EditGroupDialog'
 
 type GroupDoc = {
   _id: string
@@ -161,6 +162,14 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
+            {isActive && (
+              <EditGroupDialog
+                groupId={groupId}
+                name={group.name}
+                allocatedCapital={stats.allocatedCapital}
+                capitalDeployed={stats.capitalDeployed}
+              />
+            )}
             {isActive && (
               <AddEntryDialog groupId={groupId} capitalFree={stats.capitalFree} />
             )}

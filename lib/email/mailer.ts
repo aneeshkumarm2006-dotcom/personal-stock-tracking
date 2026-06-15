@@ -27,6 +27,17 @@ function getTransporter(): Transporter | null {
   return cached
 }
 
+// Resolve the alert recipients from env. ALERT_EMAIL_TO is a comma- (or
+// semicolon-) separated list, so you can add/remove addresses without code
+// changes. Falls back to the Gmail account itself when unset.
+function getRecipients(): string[] {
+  const raw = process.env.ALERT_EMAIL_TO || process.env.GMAIL_USER || ''
+  return raw
+    .split(/[,;]/)
+    .map((addr) => addr.trim())
+    .filter(Boolean)
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -102,13 +113,23 @@ export async function sendWatchlistAlertEmail(
     return { sent: false, reason: 'not_configured' }
   }
 
-  const to = process.env.ALERT_EMAIL_TO || process.env.GMAIL_USER
+  const recipients = getRecipients()
+  if (recipients.length === 0) {
+    console.log(
+      JSON.stringify({
+        event: 'watchlist.alert.email',
+        status: 'skipped',
+        reason: 'no_recipients',
+      }),
+    )
+    return { sent: false, reason: 'not_configured' }
+  }
   const { subject, html } = buildAlertEmail(alert)
 
   try {
     await transporter.sendMail({
       from: process.env.GMAIL_USER,
-      to,
+      to: recipients,
       subject,
       html,
     })
