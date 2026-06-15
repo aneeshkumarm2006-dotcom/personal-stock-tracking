@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { InstrumentPerformanceClient } from '@/components/portfolio/InstrumentPerformanceClient'
+import { InstrumentNotesCard } from '@/components/portfolio/InstrumentNotesCard'
 import { formatCurrency, formatInt, formatPercent, pnlColorClass } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -135,6 +136,8 @@ export default async function InstrumentPage({ params }: PageProps) {
           <InstrumentPerformanceClient token={token} exchange={exchange} />
         </CardContent>
       </Card>
+
+      <InstrumentNotesCard token={token} instrumentSymbol={instrument.symbol} />
     </div>
   )
 }

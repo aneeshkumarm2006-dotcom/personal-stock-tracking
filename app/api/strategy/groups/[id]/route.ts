@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
 type RouteContext = { params: Promise<{ id: string }> }
 
 const updateGroupSchema = z.union([
-  z.object({ action: z.literal('close') }),
+  z.object({ action: z.literal('close'), force: z.boolean().optional() }),
   z.object({
     name: z.string().min(1).optional(),
     allocatedCapital: z.number().positive().optional(),
@@ -72,16 +72,49 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
   const update: Record<string, unknown> = {}
   if ('action' in parsed.data && parsed.data.action === 'close') {
-    const openEntries = await StrategyEntry.countDocuments({
+    const openDocs = await StrategyEntry.find({
       groupId: id,
       status: { $nin: TERMINAL_STATUSES },
     })
-    if (openEntries > 0) {
-      return NextResponse.json(
-        { error: 'Cannot close group with open entries' },
-        { status: 409 },
+
+    if (openDocs.length > 0) {
+      if (!parsed.data.force) {
+        return NextResponse.json(
+          { error: 'Cannot close group with open entries' },
+          { status: 409 },
+        )
+      }
+
+      // Force close: book every still-open entry at its current market price
+      // (falling back to the entry price when no live snapshot is available),
+      // mirroring a manual close on each one, before the group is closed.
+      const snapshots = await loadSnapshotsForTokens(
+        openDocs.map((e) => e.instrumentToken),
       )
+      const ltpByToken = new Map<string, number>()
+      for (const s of snapshots) {
+        if (typeof s.ltp === 'number' && Number.isFinite(s.ltp)) {
+          ltpByToken.set(s.token, s.ltp)
+        }
+      }
+
+      const now = new Date()
+      for (const entry of openDocs) {
+        const wasPending = entry.status === 'pending'
+        const closePrice = ltpByToken.get(entry.instrumentToken) ?? entry.entryPrice
+        const remaining = Math.max(0, entry.quantity - (entry.soldQuantity ?? 0))
+        entry.soldQuantity = entry.quantity
+        entry.status = 'closed_manual'
+        entry.events.push({
+          type: 'closed_manual',
+          price: closePrice,
+          quantity: wasPending ? undefined : remaining,
+          timestamp: now,
+        })
+        await entry.save()
+      }
     }
+
     update.status = 'closed'
     update.closedAt = new Date()
   } else if ('name' in parsed.data || 'allocatedCapital' in parsed.data) {

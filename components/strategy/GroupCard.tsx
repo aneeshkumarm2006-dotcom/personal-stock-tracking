@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
@@ -13,6 +14,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency } from '@/lib/format'
 import type { GroupStats } from '@/lib/strategy/group'
@@ -50,6 +59,7 @@ const TERMINAL = new Set(['tp_hit', 'sl_hit', 'trail_hit', 'closed_manual'])
 export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
   const queryClient = useQueryClient()
   const router = useRouter()
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const query = useQuery({
     queryKey: ['strategyGroup', groupId],
@@ -58,12 +68,12 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
   })
 
   const closeMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (force: boolean) => {
       const res = await fetch(`/api/strategy/groups/${groupId}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'close' }),
+        body: JSON.stringify({ action: 'close', force }),
       })
       if (!res.ok) {
         let message = `Failed (${res.status})`
@@ -75,6 +85,7 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
       }
     },
     onSuccess: async () => {
+      setConfirmOpen(false)
       toast.success('Group closed')
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['strategyGroup', groupId] }),
@@ -114,10 +125,8 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
 
   const { group, stats } = query.data
   const counts = stats.entryCountByStatus
-  const allTerminal =
-    stats.entries.length > 0 &&
-    stats.entries.every((e) => TERMINAL.has(e.status))
-  const canClose = group.status === 'active' && allTerminal
+  const hasOpenEntries = stats.entries.some((e) => !TERMINAL.has(e.status))
+  const isActive = group.status === 'active'
   const winRatePct = Math.round(stats.winRate * 10000) / 100
 
   return (
@@ -146,14 +155,16 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            {group.status === 'active' && (
+            {isActive && (
               <AddEntryDialog groupId={groupId} capitalFree={stats.capitalFree} />
             )}
-            {canClose && (
+            {isActive && (
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => closeMutation.mutate()}
+                onClick={() =>
+                  hasOpenEntries ? setConfirmOpen(true) : closeMutation.mutate(false)
+                }
                 disabled={closeMutation.isPending}
               >
                 {closeMutation.isPending ? 'Closing…' : 'Close group'}
@@ -189,6 +200,42 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
           allowClose={group.status === 'active'}
         />
       </CardContent>
+
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={(next) => {
+          if (!closeMutation.isPending) setConfirmOpen(next)
+        }}
+      >
+        <DialogContent className="sm:max-w-sm" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Close group with open entries?</DialogTitle>
+            <DialogDescription>
+              “{group.name}” still has open entries. Closing now books each of them at
+              its current market price and moves the group to history. This can’t be
+              undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
+              disabled={closeMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => closeMutation.mutate(true)}
+              disabled={closeMutation.isPending}
+            >
+              {closeMutation.isPending ? 'Closing…' : 'Close group'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

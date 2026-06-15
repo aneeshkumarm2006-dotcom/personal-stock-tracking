@@ -58,6 +58,13 @@ export const holdingTagsSchema = z.object({
 
 export type HoldingTagsInput = z.infer<typeof holdingTagsSchema>
 
+export const instrumentNoteSchema = z.object({
+  instrumentSymbol: z.string().optional(),
+  note: z.string().max(10000, 'note is too long'),
+})
+
+export type InstrumentNoteInput = z.infer<typeof instrumentNoteSchema>
+
 export const strategyGroupSchema = z.object({
   name: z.string().min(1, 'name is required'),
   allocatedCapital: z.number().positive('allocatedCapital must be greater than zero'),
