@@ -54,7 +54,13 @@ async function fetchGroupDetail(id: string): Promise<GroupDetailResponse> {
   return (await res.json()) as GroupDetailResponse
 }
 
-const TERMINAL = new Set(['tp_hit', 'sl_hit', 'trail_hit', 'closed_manual'])
+const TERMINAL = new Set([
+  'tp_hit',
+  'sl_hit',
+  'trail_hit',
+  'closed_manual',
+  'expired',
+])
 
 export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
   const queryClient = useQueryClient()
@@ -191,6 +197,13 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
             <Stat label="Trail hit" value={counts.trail_hit} valueClass="text-gain" />
             <Stat label="SL hit" value={counts.sl_hit} valueClass="text-loss" />
             <Stat label="Closed" value={counts.closed_manual} />
+            {counts.expired > 0 && (
+              <Stat
+                label="Expired"
+                value={counts.expired}
+                valueClass="text-muted-foreground"
+              />
+            )}
           </div>
         </dl>
 

@@ -3,6 +3,7 @@ import {
   isMarketOpen,
   nextMarketOpen,
   nowIST,
+  tradingDaysBetween,
 } from '@/lib/time/marketHours'
 
 // Helper: build a UTC Date from an IST wall-clock ISO string.
@@ -83,5 +84,39 @@ describe('nextMarketOpen', () => {
 describe('nowIST', () => {
   it('returns a Date instance', () => {
     expect(nowIST()).toBeInstanceOf(Date)
+  })
+})
+
+describe('tradingDaysBetween', () => {
+  // 2024-06-03 is a Monday (IST). Two calendar weeks later, 2024-06-17, is also
+  // a Monday — exactly 10 weekdays after the start day.
+  it('counts 10 weekdays across two calendar weeks (Mon → Mon)', () => {
+    expect(
+      tradingDaysBetween(ist('2024-06-03T11:00:00'), ist('2024-06-17T11:00:00')),
+    ).toBe(10)
+  })
+
+  it('counts 9 weekdays after nine trading days (Mon → Fri week 2)', () => {
+    expect(
+      tradingDaysBetween(ist('2024-06-03T11:00:00'), ist('2024-06-14T11:00:00')),
+    ).toBe(9)
+  })
+
+  it('excludes the weekend (Fri → Mon counts one trading day)', () => {
+    expect(
+      tradingDaysBetween(ist('2024-06-07T11:00:00'), ist('2024-06-10T11:00:00')),
+    ).toBe(1)
+  })
+
+  it('returns 0 within the same trading day', () => {
+    expect(
+      tradingDaysBetween(ist('2024-06-03T09:30:00'), ist('2024-06-03T15:00:00')),
+    ).toBe(0)
+  })
+
+  it('returns 0 when end is not after start', () => {
+    expect(
+      tradingDaysBetween(ist('2024-06-17T11:00:00'), ist('2024-06-03T11:00:00')),
+    ).toBe(0)
   })
 })

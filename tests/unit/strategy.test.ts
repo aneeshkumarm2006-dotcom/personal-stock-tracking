@@ -110,6 +110,77 @@ describe('evaluateEntries', () => {
     expect(entry.events.at(-1)?.type).toBe('entry_hit')
   })
 
+  it('pending → expired after 10 trading days without triggering', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      status: 'pending',
+      triggerType: 'limit',
+      // Created Mon 2024-06-03 IST; evaluated Mon 2024-06-17 IST = 10 trading days.
+      createdAt: new Date('2024-06-03T05:30:00Z'),
+    })
+    const now = new Date('2024-06-17T05:30:00Z')
+    // LTP 105 is above a dip-buy entry, so it never filled.
+    const out = await evaluateEntries([entry], [snap('T1', 105)], now)
+    expect(entry.status).toBe('expired')
+    expect(entry.events.at(-1)?.type).toBe('expired')
+    expect(entry.events.at(-1)?.price).toBe(105)
+    expect(entry.save).toHaveBeenCalledTimes(1)
+    expect(out.transitioned).toBe(1)
+  })
+
+  it('pending stays pending before 10 trading days elapse', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      status: 'pending',
+      triggerType: 'limit',
+      createdAt: new Date('2024-06-03T05:30:00Z'),
+    })
+    // Fri 2024-06-14 IST = only 9 trading days since creation.
+    const now = new Date('2024-06-14T05:30:00Z')
+    await evaluateEntries([entry], [snap('T1', 105)], now)
+    expect(entry.status).toBe('pending')
+    expect(entry.events).toHaveLength(0)
+    expect(entry.save).not.toHaveBeenCalled()
+  })
+
+  it('a triggered entry fills rather than expiring, even when old', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      status: 'pending',
+      triggerType: 'limit',
+      createdAt: new Date('2024-06-03T05:30:00Z'),
+    })
+    const now = new Date('2024-06-17T05:30:00Z')
+    // LTP 99 meets the dip-buy trigger: it fills (entry_hit), not expires.
+    await evaluateEntries([entry], [snap('T1', 99)], now)
+    expect(entry.status).toBe('active')
+    expect(entry.events.at(-1)?.type).toBe('entry_hit')
+  })
+
+  it('without createdAt a pending entry never auto-expires', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      status: 'pending',
+      triggerType: 'limit',
+    })
+    const now = new Date('2024-06-17T05:30:00Z')
+    await evaluateEntries([entry], [snap('T1', 105)], now)
+    expect(entry.status).toBe('pending')
+    expect(entry.save).not.toHaveBeenCalled()
+  })
+
   it('active → tp_hit when LTP reaches target', async () => {
     const entry = makeEntry({
       instrumentToken: 'T1',
@@ -388,6 +459,53 @@ describe('computeGroupStats', () => {
     expect(first.reward).toBe(200) // (120-100)*10
     expect(first.rr).toBe(2)
     expect(first.unrealizedPnL).toBe(50) // (105-100)*10
+  })
+
+  it('an expired entry frees its capital and is not a win or loss', () => {
+    const stats = computeGroupStats(
+      { allocatedCapital: 10000 },
+      [
+        // active: 10 * 100 = 1000 deployed
+        {
+          instrumentToken: 'T1',
+          entryPrice: 100,
+          stopLoss: 90,
+          targetPrice: 120,
+          quantity: 10,
+          status: 'active' as const,
+        },
+        // expired: never filled → no capital deployed, excluded from win rate
+        {
+          instrumentToken: 'T2',
+          entryPrice: 200,
+          stopLoss: 180,
+          targetPrice: 240,
+          quantity: 5,
+          status: 'expired' as const,
+          events: [{ type: 'expired', price: 210, timestamp: new Date() }],
+        },
+        // one win so the rate is well-defined
+        {
+          instrumentToken: 'T3',
+          entryPrice: 50,
+          stopLoss: 45,
+          targetPrice: 60,
+          quantity: 4,
+          status: 'tp_hit' as const,
+        },
+      ],
+      [snap('T1', 105)],
+    )
+
+    // Only the active entry deploys capital; the expired one freed its ₹1000.
+    expect(stats.capitalDeployed).toBe(1000)
+    expect(stats.capitalFree).toBe(9000)
+    expect(stats.entryCountByStatus.expired).toBe(1)
+    // 1 win, 0 losses (expired is neither) → 100%.
+    expect(stats.winRate).toBe(1)
+    const expired = stats.entries.find((e) => e.instrumentToken === 'T2')!
+    expect(expired.unrealizedPnL).toBe(0)
+    expect(expired.realizedPnL).toBe(0)
   })
 
   it('returns winRate = 0 when no decided entries exist', () => {

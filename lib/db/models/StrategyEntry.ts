@@ -61,6 +61,8 @@ const strategyEntrySchema = new Schema(
         'sl_hit',
         'trail_hit',
         'closed_manual',
+        // Pending entry aged out without ever triggering (see EXPIRY_TRADING_DAYS).
+        'expired',
       ],
       default: 'pending',
     },

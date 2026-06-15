@@ -79,6 +79,7 @@ function emptyCounts(): Record<StrategyEntryStatus, number> {
     sl_hit: 0,
     trail_hit: 0,
     closed_manual: 0,
+    expired: 0,
   }
 }
 

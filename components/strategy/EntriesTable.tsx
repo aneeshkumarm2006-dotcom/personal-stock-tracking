@@ -91,6 +91,12 @@ function statusDisplay(entry: EntryStats): StatusDisplay {
       }
     case 'closed_manual':
       return { label: 'Closed', variant: 'outline' }
+    case 'expired':
+      return {
+        label: 'Expired · never filled',
+        variant: 'outline',
+        className: 'text-muted-foreground',
+      }
     default:
       return { label: entry.status, variant: 'outline' }
   }
@@ -176,7 +182,9 @@ export function EntriesTable({ groupId, entries, allowClose = true }: EntriesTab
                     </Badge>
                   </TableCell>
                   <TableCell className={`text-right ${pnlColorClass(e.totalPnL)}`}>
-                    {e.status === 'pending' ? '—' : formatCurrency(e.totalPnL)}
+                    {e.status === 'pending' || e.status === 'expired'
+                      ? '—'
+                      : formatCurrency(e.totalPnL)}
                   </TableCell>
                   {allowClose && (
                     <TableCell className="text-right">

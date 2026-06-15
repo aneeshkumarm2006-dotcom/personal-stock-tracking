@@ -1,4 +1,5 @@
 import type { PriceSnapshotData } from '@/lib/angelone/quotes'
+import { tradingDaysBetween } from '@/lib/time/marketHours'
 
 export type StrategyEventType =
   | 'entry_hit'
@@ -8,6 +9,7 @@ export type StrategyEventType =
   | 'sl_hit'
   | 'trail_hit'
   | 'closed_manual'
+  | 'expired'
 
 export type StrategyEvent = {
   type: StrategyEventType
@@ -27,6 +29,8 @@ export type StrategyEntryStatus =
   | 'sl_hit'
   | 'trail_hit'
   | 'closed_manual'
+  // Never filled: a pending entry that didn't trigger within EXPIRY_TRADING_DAYS.
+  | 'expired'
 
 // Statuses an entry can still move out of — these are re-evaluated each cycle.
 export const OPEN_ENTRY_STATUSES = [
@@ -42,7 +46,23 @@ export const TERMINAL_ENTRY_STATUSES = [
   'sl_hit',
   'trail_hit',
   'closed_manual',
+  'expired',
 ] as const
+
+// A pending entry that never fills is aged out after this many trading days and
+// marked 'expired': it stays on record (no position was ever taken) and its
+// reserved capital is freed. Trading days are NSE weekdays — see
+// tradingDaysBetween for the (holiday-agnostic) definition.
+export const EXPIRY_TRADING_DAYS = 10
+
+// Whether a still-pending entry has sat un-triggered long enough to expire.
+export function pendingHasExpired(
+  createdAt: Date,
+  now: Date,
+  limit: number = EXPIRY_TRADING_DAYS,
+): boolean {
+  return tradingDaysBetween(createdAt, now) >= limit
+}
 
 // How a pending long entry arms its fill:
 //   - 'limit' (buy the dip): fills when price falls to or through the entry.
@@ -64,6 +84,10 @@ export interface EvaluatableEntry {
   direction?: 'long'
   triggerType?: TriggerType
   status: StrategyEntryStatus
+  // When the entry was created; drives expiry of un-triggered pending entries.
+  // Supplied by Mongoose's timestamps. Absent only in synthetic/legacy rows, in
+  // which case the entry simply never auto-expires.
+  createdAt?: Date
   events: StrategyEvent[]
   save: () => Promise<unknown>
 }
@@ -184,6 +208,18 @@ export async function evaluateEntries(
         if (entryTriggered(entry.triggerType, entry.entryPrice, ltp)) {
           entry.status = 'active'
           entry.events.push({ type: 'entry_hit', price: ltp, timestamp: now })
+          await entry.save()
+          transitioned += 1
+          continue
+        }
+
+        // Age out an entry that never filled. Once it has sat un-triggered for
+        // EXPIRY_TRADING_DAYS it is marked 'expired' — kept on record (the ltp
+        // is logged for context) and its reserved capital is freed. The thesis
+        // behind the entry has gone stale; it should stop holding allocation.
+        if (entry.createdAt && pendingHasExpired(entry.createdAt, now)) {
+          entry.status = 'expired'
+          entry.events.push({ type: 'expired', price: ltp, timestamp: now })
           await entry.save()
           transitioned += 1
         }

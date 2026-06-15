@@ -31,6 +31,42 @@ export function isMarketOpen(now?: Date): boolean {
   return totalSeconds >= OPEN_SECONDS && totalSeconds <= CLOSE_SECONDS
 }
 
+// Trading days (NSE weekdays, IST) that have elapsed strictly after `start` up
+// to and including `end`. Holidays are NOT excluded — the app keeps no holiday
+// calendar, so this counts Mon–Fri exactly like nextMarketOpen() does. It is
+// used to age out un-triggered strategy entries after ~2 calendar weeks, where
+// being off by the occasional exchange holiday is immaterial.
+export function tradingDaysBetween(start: Date, end: Date): number {
+  if (end.getTime() <= start.getTime()) return 0
+
+  const startIst = toZonedTime(start, IST_TIMEZONE)
+  const endIst = toZonedTime(end, IST_TIMEZONE)
+  const endOrdinal = Date.UTC(
+    endIst.getFullYear(),
+    endIst.getMonth(),
+    endIst.getDate(),
+  )
+
+  let year = startIst.getFullYear()
+  let month = startIst.getMonth()
+  let day = startIst.getDate()
+  let count = 0
+
+  // Walk one IST calendar day at a time, from the day after `start` through the
+  // day of `end`, tallying weekdays.
+  for (;;) {
+    const probe = new Date(Date.UTC(year, month, day + 1))
+    year = probe.getUTCFullYear()
+    month = probe.getUTCMonth()
+    day = probe.getUTCDate()
+    if (Date.UTC(year, month, day) > endOrdinal) break
+    const dow = probe.getUTCDay()
+    if (dow !== 0 && dow !== 6) count += 1
+  }
+
+  return count
+}
+
 export function nextMarketOpen(now?: Date): Date {
   const base = now ?? new Date()
   const zoned = toZonedTime(base, IST_TIMEZONE)

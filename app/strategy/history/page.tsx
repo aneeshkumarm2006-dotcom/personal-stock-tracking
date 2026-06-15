@@ -84,6 +84,12 @@ function statusBadge(status: StrategyEntryStatus) {
       )
     case 'closed_manual':
       return <Badge variant="outline">Closed</Badge>
+    case 'expired':
+      return (
+        <Badge variant="outline" className="text-muted-foreground">
+          Expired
+        </Badge>
+      )
     case 'partial':
       return <Badge variant="secondary">Scaled out</Badge>
     case 'trailing':
@@ -129,6 +135,8 @@ function eventLabel(type: string): string {
       return 'Stop loss hit'
     case 'closed_manual':
       return 'Closed manually'
+    case 'expired':
+      return 'Expired — never triggered within 10 trading days'
     default:
       return type
   }
