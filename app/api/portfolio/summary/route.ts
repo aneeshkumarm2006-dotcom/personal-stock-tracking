@@ -23,9 +23,14 @@ export async function GET() {
     loadSnapshotsForTokens(tokens),
     CashAccount.findOne({ key: 'default' }).lean() as Promise<{
       fundsAdded?: number
+      realizedPnLBaseline?: number
     } | null>,
   ])
-  const summary = computeSummary(holdings, snapshots)
+  const summary = computeSummary(
+    holdings,
+    snapshots,
+    cashAccount?.realizedPnLBaseline ?? 0,
+  )
   const cash = computeCash(
     cashAccount?.fundsAdded ?? 0,
     computeNetInvested(transactions),
