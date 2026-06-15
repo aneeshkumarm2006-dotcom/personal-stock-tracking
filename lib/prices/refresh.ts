@@ -163,13 +163,28 @@ async function fetchQuotesWithReauth(grouped: ExchangeTokens): Promise<PriceSnap
   }
 }
 
-export async function runRefreshCycle(): Promise<RefreshResult> {
+export type RefreshOptions = {
+  // When false, portfolio holdings are NOT priced. The background cron uses this:
+  // the portfolio page isn't watched while the site is closed, so there's no
+  // reason to spend quote quota keeping its prices warm. Watchlist, strategy, and
+  // alert tokens (including portfolio holding alerts) are always refreshed.
+  // Defaults to true so the manual Refresh button and the live page pollers keep
+  // the portfolio current while someone is actually using the site.
+  includeHoldings?: boolean
+}
+
+export async function runRefreshCycle(
+  options: RefreshOptions = {},
+): Promise<RefreshResult> {
+  const { includeHoldings = true } = options
   const startedAt = Date.now()
   await connectDB()
 
   const [holdingTokens, strategyTokens, watchlistTokens, holdingAlertTokens] =
     await Promise.all([
-      collectOpenHoldingTokens(),
+      includeHoldings
+        ? collectOpenHoldingTokens()
+        : Promise.resolve(new Set<string>()),
       collectStrategyTokens(),
       collectWatchlistTokens(),
       collectHoldingAlertTokens(),

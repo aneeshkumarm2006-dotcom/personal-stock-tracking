@@ -16,6 +16,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ status: 'market_closed' })
   }
 
-  const result = await runRefreshCycle()
+  // Background job: the site may be closed, so only keep the always-important
+  // surfaces warm — watchlist, strategy, and alerts. Portfolio holdings are
+  // skipped here; they're refreshed on demand by the Refresh button / live page
+  // pollers when someone actually has the site open.
+  const result = await runRefreshCycle({ includeHoldings: false })
   return NextResponse.json({ status: 'ok', result })
 }
