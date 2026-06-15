@@ -58,10 +58,14 @@ function buildAlertEmail(alert: TriggeredAlert): {
     : ''
 
   const base = process.env.APP_BASE_URL ?? ''
+  const path =
+    alert.source === 'portfolio'
+      ? `/portfolio/${encodeURIComponent(alert.instrumentToken)}`
+      : '/watchlist'
   const link = base
     ? `<p style="margin-top:16px"><a href="${escapeHtml(
-        base,
-      )}/watchlist">View in app</a></p>`
+        base + path,
+      )}">View in app</a></p>`
     : ''
 
   const html = `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:560px">

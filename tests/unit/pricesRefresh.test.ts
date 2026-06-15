@@ -30,6 +30,10 @@ vi.mock('@/lib/db/models/WatchlistItem', () => ({
   WatchlistItem: { find: vi.fn() },
 }))
 
+vi.mock('@/lib/db/models/HoldingAlert', () => ({
+  HoldingAlerts: { find: vi.fn() },
+}))
+
 vi.mock('@/lib/watchlist/evaluate', () => ({
   evaluateWatchlistAlerts: vi.fn().mockResolvedValue([]),
 }))
@@ -63,6 +67,7 @@ import { PriceSnapshot } from '@/lib/db/models/PriceSnapshot'
 import { StrategyEntry } from '@/lib/db/models/StrategyEntry'
 import { Transaction } from '@/lib/db/models/Transaction'
 import { WatchlistItem } from '@/lib/db/models/WatchlistItem'
+import { HoldingAlerts } from '@/lib/db/models/HoldingAlert'
 import { getQuotes } from '@/lib/angelone/quotes'
 import { getValidSession, invalidateSession } from '@/lib/angelone/session'
 import { evaluateEntries } from '@/lib/strategy/evaluate'
@@ -77,6 +82,7 @@ const aggregateMock = Transaction.aggregate as unknown as ReturnType<typeof vi.f
 const strategyFindMock = StrategyEntry.find as unknown as ReturnType<typeof vi.fn>
 const instrumentFindMock = Instrument.find as unknown as ReturnType<typeof vi.fn>
 const watchlistFindMock = WatchlistItem.find as unknown as ReturnType<typeof vi.fn>
+const holdingAlertFindMock = HoldingAlerts.find as unknown as ReturnType<typeof vi.fn>
 const bulkWriteMock = PriceSnapshot.bulkWrite as unknown as ReturnType<typeof vi.fn>
 const invalidateSessionMock = invalidateSession as unknown as ReturnType<typeof vi.fn>
 const getQuotesMock = getQuotes as unknown as ReturnType<typeof vi.fn>
@@ -119,6 +125,10 @@ beforeEach(() => {
   // No watchlist alerts by default: token-collection (projected, .lean()) and
   // the hydrated fetch (awaited directly) both return empty.
   watchlistFindMock.mockImplementation((_filter: unknown, projection?: unknown) =>
+    projection ? leanReturn([]) : Promise.resolve([]),
+  )
+  // No holding alerts by default, same dual-call shape as the watchlist find.
+  holdingAlertFindMock.mockImplementation((_filter: unknown, projection?: unknown) =>
     projection ? leanReturn([]) : Promise.resolve([]),
   )
 })

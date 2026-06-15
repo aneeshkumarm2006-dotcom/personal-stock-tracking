@@ -4,6 +4,7 @@ import { PriceSnapshot } from '@/lib/db/models/PriceSnapshot'
 import { StrategyEntry } from '@/lib/db/models/StrategyEntry'
 import { Transaction } from '@/lib/db/models/Transaction'
 import { WatchlistItem } from '@/lib/db/models/WatchlistItem'
+import { HoldingAlerts } from '@/lib/db/models/HoldingAlert'
 import { getQuotes, type ExchangeTokens, type PriceSnapshotData } from '@/lib/angelone/quotes'
 import { AuthError, RateLimitError } from '@/lib/angelone/errors'
 import { getValidSession, invalidateSession } from '@/lib/angelone/session'
@@ -85,6 +86,25 @@ async function fetchAlertableWatchlistItems(): Promise<WatchlistItemForEval[]> {
   return docs as unknown as WatchlistItemForEval[]
 }
 
+// Portfolio holding alerts live on their own per-instrument docs. Same shape as
+// watchlist items for the evaluator (token/symbol/exchange/alerts/save).
+async function collectHoldingAlertTokens(): Promise<Set<string>> {
+  const docs = await HoldingAlerts.find(
+    { 'alerts.status': 'armed' },
+    { instrumentToken: 1, _id: 0 },
+  ).lean()
+  const set = new Set<string>()
+  for (const d of docs) {
+    if (d.instrumentToken) set.add(d.instrumentToken)
+  }
+  return set
+}
+
+async function fetchAlertableHoldingAlerts(): Promise<WatchlistItemForEval[]> {
+  const docs = await HoldingAlerts.find({ 'alerts.status': 'armed' })
+  return docs as unknown as WatchlistItemForEval[]
+}
+
 async function groupTokensByExchange(tokens: Set<string>): Promise<ExchangeTokens> {
   if (tokens.size === 0) return {}
   const instruments = await Instrument.find(
@@ -144,15 +164,18 @@ export async function runRefreshCycle(): Promise<RefreshResult> {
   const startedAt = Date.now()
   await connectDB()
 
-  const [holdingTokens, strategyTokens, watchlistTokens] = await Promise.all([
-    collectOpenHoldingTokens(),
-    collectStrategyTokens(),
-    collectWatchlistAlertTokens(),
-  ])
+  const [holdingTokens, strategyTokens, watchlistTokens, holdingAlertTokens] =
+    await Promise.all([
+      collectOpenHoldingTokens(),
+      collectStrategyTokens(),
+      collectWatchlistAlertTokens(),
+      collectHoldingAlertTokens(),
+    ])
   const union = new Set<string>([
     ...holdingTokens,
     ...strategyTokens,
     ...watchlistTokens,
+    ...holdingAlertTokens,
   ])
 
   if (union.size === 0) {
@@ -226,7 +249,18 @@ export async function runRefreshCycle(): Promise<RefreshResult> {
     // holds even if the email fails. Each send is guarded so one failure
     // doesn't block the others or abort the cycle.
     const watchItems = await fetchAlertableWatchlistItems()
-    const triggered = await evaluateWatchlistAlerts(watchItems, snapshots)
+    const holdingAlertDocs = await fetchAlertableHoldingAlerts()
+    const triggered = [
+      ...(await evaluateWatchlistAlerts(watchItems, snapshots)),
+      // Portfolio holding alerts ride the same snapshot batch; tagged 'portfolio'
+      // so the email links back to the stock page instead of the watchlist.
+      ...(await evaluateWatchlistAlerts(
+        holdingAlertDocs,
+        snapshots,
+        undefined,
+        'portfolio',
+      )),
+    ]
     for (const t of triggered) {
       try {
         await sendWatchlistAlertEmail(t)

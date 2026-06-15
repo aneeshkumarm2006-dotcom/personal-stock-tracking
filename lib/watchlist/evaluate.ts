@@ -23,6 +23,10 @@ export interface WatchlistItemForEval {
   save: () => Promise<unknown>
 }
 
+// Which feature owns the alert — used by the mailer to link back to the right
+// page ('watchlist' tab vs the portfolio stock page).
+export type AlertSource = 'watchlist' | 'portfolio'
+
 // A fired alert, returned for the caller to email. Self-contained so the
 // evaluator stays pure (no email/IO of its own).
 export type TriggeredAlert = {
@@ -36,6 +40,7 @@ export type TriggeredAlert = {
   dayChangePct: number | null
   note: string
   triggeredAt: Date
+  source: AlertSource
 }
 
 function indexSnapshots(
@@ -59,6 +64,7 @@ export async function evaluateWatchlistAlerts(
   items: WatchlistItemForEval[],
   snapshots: PriceSnapshotData[],
   now: Date = new Date(),
+  source: AlertSource = 'watchlist',
 ): Promise<TriggeredAlert[]> {
   const snapByToken = indexSnapshots(snapshots)
   const triggered: TriggeredAlert[] = []
@@ -96,6 +102,7 @@ export async function evaluateWatchlistAlerts(
           typeof snap.pctChange === 'number' ? snap.pctChange : null,
         note: alert.note ?? '',
         triggeredAt: now,
+        source,
       })
     }
 

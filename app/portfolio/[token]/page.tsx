@@ -21,6 +21,7 @@ import {
 import { EmptyState } from '@/components/ui/empty-state'
 import { InstrumentPerformanceClient } from '@/components/portfolio/InstrumentPerformanceClient'
 import { InstrumentNotesCard } from '@/components/portfolio/InstrumentNotesCard'
+import { HoldingAlertsCard } from '@/components/portfolio/HoldingAlertsCard'
 import { formatCurrency, formatInt, formatPercent, pnlColorClass } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -136,6 +137,13 @@ export default async function InstrumentPage({ params }: PageProps) {
           <InstrumentPerformanceClient token={token} exchange={exchange} />
         </CardContent>
       </Card>
+
+      <HoldingAlertsCard
+        token={token}
+        instrumentSymbol={instrument.symbol}
+        exchange={exchange}
+        ltp={holding?.currentPrice ?? null}
+      />
 
       <InstrumentNotesCard token={token} instrumentSymbol={instrument.symbol} />
     </div>

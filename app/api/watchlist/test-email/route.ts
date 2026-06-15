@@ -19,6 +19,7 @@ export async function POST() {
     dayChangePct: -1.8,
     note: 'This is a test alert email from your watchlist.',
     triggeredAt: new Date(),
+    source: 'watchlist',
   }
 
   const result = await sendWatchlistAlertEmail(sample)

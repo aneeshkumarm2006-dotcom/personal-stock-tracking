@@ -193,3 +193,13 @@ export type PriceAlertInput = z.infer<typeof priceAlertSchema>
 export const priceAlertUpdateSchema = priceAlertSchema.partial()
 
 export type PriceAlertUpdateInput = z.infer<typeof priceAlertUpdateSchema>
+
+// Holding (portfolio) alerts reuse the same alert fields, plus optional
+// symbol/exchange so the first POST can seed the per-instrument doc (the cron
+// needs them for the trigger email).
+export const holdingAlertCreateSchema = priceAlertSchema.extend({
+  instrumentSymbol: z.string().optional(),
+  exchange: exchangeEnum.optional(),
+})
+
+export type HoldingAlertCreateInput = z.infer<typeof holdingAlertCreateSchema>
