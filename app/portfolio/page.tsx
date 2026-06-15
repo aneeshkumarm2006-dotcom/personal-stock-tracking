@@ -30,11 +30,16 @@ export default async function PortfolioPage() {
   const holdings = computeHoldings(transactions)
   const tokens = holdings.map((h) => h.instrumentToken)
   const snapshots = await loadSnapshotsForTokens(tokens)
-  const summary = computeSummary(holdings, snapshots)
 
   const cashAccount = (await CashAccount.findOne({ key: 'default' }).lean()) as {
     fundsAdded?: number
+    realizedPnLBaseline?: number
   } | null
+  const summary = computeSummary(
+    holdings,
+    snapshots,
+    cashAccount?.realizedPnLBaseline ?? 0,
+  )
   const cash = computeCash(
     cashAccount?.fundsAdded ?? 0,
     computeNetInvested(transactions),
