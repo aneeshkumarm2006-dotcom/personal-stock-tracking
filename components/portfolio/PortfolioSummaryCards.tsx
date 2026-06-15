@@ -43,9 +43,10 @@ export function PortfolioSummaryCards({ summary }: PortfolioSummaryCardsProps) {
       valueClass: pnlColorClass(summary.totalRealizedPnL),
     },
     {
-      label: 'Overall return',
-      value: formatPercent(summary.overallReturnPct),
-      valueClass: pnlColorClass(summary.overallReturnPct),
+      label: "Today's change",
+      value: formatCurrency(summary.totalDayChange),
+      hint: formatPercent(summary.dayChangePct),
+      valueClass: pnlColorClass(summary.totalDayChange),
     },
   ]
 

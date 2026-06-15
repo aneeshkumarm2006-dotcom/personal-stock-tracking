@@ -6,6 +6,7 @@ export type EnrichedHolding = HoldingData & {
   currentValue: number
   unrealizedPnL: number
   unrealizedPnLPct: number
+  dayChange: number
   dayChangePct: number | null
   snapshotFetchedAt: Date | null
 }
@@ -15,6 +16,8 @@ export type PortfolioSummary = {
   totalCurrentValue: number
   totalUnrealizedPnL: number
   totalRealizedPnL: number
+  totalDayChange: number
+  dayChangePct: number
   overallReturnPct: number
   holdings: EnrichedHolding[]
 }
@@ -42,12 +45,25 @@ export function enrichHoldings(
     const unrealizedPnLPct =
       h.totalInvested > 0 ? round2((unrealizedPnL / h.totalInvested) * 100) : 0
 
+    // Today's change in cash terms: prefer the per-share netChange from the
+    // snapshot, fall back to (ltp - previous close) when netChange is missing.
+    const perShareChange =
+      snap?.netChange ??
+      (currentPrice !== null && snap?.close !== undefined
+        ? currentPrice - snap.close
+        : undefined)
+    const dayChange =
+      currentPrice !== null && h.netQty > 0 && perShareChange !== undefined
+        ? round2(h.netQty * perShareChange)
+        : 0
+
     return {
       ...h,
       currentPrice,
       currentValue,
       unrealizedPnL,
       unrealizedPnLPct,
+      dayChange,
       dayChangePct: snap?.pctChange ?? null,
       snapshotFetchedAt: snap?.fetchedAt ?? null,
     }
@@ -67,12 +83,16 @@ export function computeSummary(
   let totalCurrentValue = 0
   let totalUnrealizedPnL = 0
   let totalRealizedPnL = realizedPnLBaseline
+  let totalDayChange = 0
+  let totalPrevCloseValue = 0
 
   for (const h of enriched) {
     totalInvested += h.totalInvested
     totalCurrentValue += h.currentValue
     totalUnrealizedPnL += h.unrealizedPnL
     totalRealizedPnL += h.realizedPnL
+    totalDayChange += h.dayChange
+    totalPrevCloseValue += h.currentValue - h.dayChange
   }
 
   const baseInvested = totalInvested
@@ -80,12 +100,18 @@ export function computeSummary(
     baseInvested > 0
       ? round2(((totalUnrealizedPnL + totalRealizedPnL) / baseInvested) * 100)
       : 0
+  const dayChangePct =
+    totalPrevCloseValue > 0
+      ? round2((totalDayChange / totalPrevCloseValue) * 100)
+      : 0
 
   return {
     totalInvested: round2(totalInvested),
     totalCurrentValue: round2(totalCurrentValue),
     totalUnrealizedPnL: round2(totalUnrealizedPnL),
     totalRealizedPnL: round2(totalRealizedPnL),
+    totalDayChange: round2(totalDayChange),
+    dayChangePct,
     overallReturnPct,
     holdings: enriched,
   }
