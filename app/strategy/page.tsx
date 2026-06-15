@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/PageHeader'
 import { CreateGroupDialog } from '@/components/strategy/CreateGroupDialog'
 import { GroupCard } from '@/components/strategy/GroupCard'
+import { StrategyLivePrices } from '@/components/strategy/StrategyLivePrices'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,6 +63,7 @@ export default async function StrategyPage() {
         />
       ) : (
         <div className="space-y-4">
+          <StrategyLivePrices />
           {groups.map((group) => (
             <GroupCard
               key={group._id}
