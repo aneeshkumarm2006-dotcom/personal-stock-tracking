@@ -4,7 +4,7 @@ import { connectDB } from '@/lib/db/connect'
 import { CashAccount } from '@/lib/db/models/CashAccount'
 import { Transaction } from '@/lib/db/models/Transaction'
 import { computeCash, computeNetInvested, type CashFlowTx } from '@/lib/portfolio/cash'
-import { cashAccountSchema } from '@/lib/validation/schemas'
+import { addFundsSchema, cashAccountSchema } from '@/lib/validation/schemas'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,6 +53,35 @@ export async function PUT(request: Request) {
   await CashAccount.findOneAndUpdate(
     { key: 'default' },
     { $set: { fundsAdded: parsed.data.fundsAdded } },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  )
+
+  const cash = await loadCash()
+  return NextResponse.json(cash)
+}
+
+// Add funds: atomically increment the running funds-added total by `amount`.
+export async function PATCH(request: Request) {
+  await connectDB()
+
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  const parsed = addFundsSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'Validation failed', issues: parsed.error.issues },
+      { status: 400 },
+    )
+  }
+
+  await CashAccount.findOneAndUpdate(
+    { key: 'default' },
+    { $inc: { fundsAdded: parsed.data.amount } },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   )
 

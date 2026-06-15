@@ -51,6 +51,13 @@ export const cashAccountSchema = z.object({
 
 export type CashAccountInput = z.infer<typeof cashAccountSchema>
 
+// A top-up: the amount to add to the running funds-added total.
+export const addFundsSchema = z.object({
+  amount: z.number().positive('amount must be greater than zero'),
+})
+
+export type AddFundsInput = z.infer<typeof addFundsSchema>
+
 export const holdingTagsSchema = z.object({
   instrumentSymbol: z.string().optional(),
   tags: z.array(z.string()).max(50, 'too many tags'),
