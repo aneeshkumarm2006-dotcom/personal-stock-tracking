@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { PencilIcon, XIcon } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -203,20 +204,24 @@ export function EntriesTable({
                         <div className="flex justify-end gap-1.5">
                           {canEdit && (
                             <Button
-                              size="xs"
+                              size="icon-xs"
                               variant="outline"
                               onClick={() => setEditing(e)}
+                              aria-label="Edit entry"
+                              title="Edit"
                             >
-                              Edit
+                              <PencilIcon className="size-3.5" />
                             </Button>
                           )}
                           {canClose && (
                             <Button
-                              size="xs"
+                              size="icon-xs"
                               variant="outline"
                               onClick={() => setClosing(e)}
+                              aria-label="Close entry"
+                              title="Close"
                             >
-                              Close
+                              <XIcon className="size-3.5" />
                             </Button>
                           )}
                         </div>
