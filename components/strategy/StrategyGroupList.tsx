@@ -24,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatCurrency, formatInt } from '@/lib/format'
+import { formatCurrency, formatInt, formatIstDateTime } from '@/lib/format'
 import type { EntryStats, GroupStats } from '@/lib/strategy/group'
 import { GroupCard } from './GroupCard'
 import { StrategyLivePrices } from './StrategyLivePrices'
@@ -207,6 +207,7 @@ function CommonStocksPanel({
               <TableRow>
                 <TableHead>Symbol</TableHead>
                 <TableHead>Group</TableHead>
+                <TableHead>Entry date</TableHead>
                 <TableHead className="text-right">Entry</TableHead>
                 <TableHead className="text-right">Current</TableHead>
                 <TableHead className="text-right">SL</TableHead>
@@ -229,6 +230,9 @@ function CommonStocksPanel({
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {o.groupName}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground whitespace-nowrap">
+                        {formatIstDateTime(e.createdAt)}
                       </TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(e.entryPrice)}

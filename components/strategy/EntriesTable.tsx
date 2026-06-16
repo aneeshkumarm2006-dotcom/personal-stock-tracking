@@ -250,6 +250,7 @@ export function EntriesTable({
                       <StrategyEntryTags
                         entryId={e.id}
                         groupId={groupId}
+                        instrumentSymbol={e.instrumentSymbol}
                         tags={e.tags}
                       />
                     ) : (

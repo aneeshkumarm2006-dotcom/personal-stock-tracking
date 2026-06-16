@@ -67,6 +67,13 @@ export function formatIstDate(value: Date | string | null | undefined): string {
   return istDateFormatter.format(d)
 }
 
+export function formatIstDateTime(value: Date | string | null | undefined): string {
+  if (!value) return '—'
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return '—'
+  return `${istDateFormatter.format(d)}, ${istDateTimeFormatter.format(d)} IST`
+}
+
 export function pnlColorClass(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value) || value === 0) {
     return 'text-muted-foreground'

@@ -28,6 +28,7 @@ export type EntryForStats = {
   status: StrategyEntryStatus
   events?: StrategyEvent[]
   tags?: string[]
+  createdAt?: Date | string | null
 }
 
 export type EntryStats = {
@@ -56,6 +57,8 @@ export type EntryStats = {
   unrealizedPnL: number
   totalPnL: number
   tags: string[]
+  // When the trade idea was created. ISO string, or null for legacy rows.
+  createdAt: string | null
 }
 
 export type GroupStats = {
@@ -159,6 +162,7 @@ export function computeGroupStats(
       unrealizedPnL: unrealized,
       totalPnL: round2(realized + unrealized),
       tags: e.tags ?? [],
+      createdAt: e.createdAt ? new Date(e.createdAt).toISOString() : null,
     })
   }
 
