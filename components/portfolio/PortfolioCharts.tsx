@@ -25,9 +25,9 @@ import {
   type InstrumentPnLDatum,
 } from '@/components/charts/InstrumentPnLBar'
 import {
-  PortfolioValueArea,
-  type PortfolioValueDatum,
-} from '@/components/charts/PortfolioValueArea'
+  WealthHistoryChart,
+  type WealthHistoryDatum,
+} from '@/components/charts/WealthHistoryChart'
 import { sectorForSymbol } from '@/lib/portfolio/sectors'
 import type { EnrichedHolding } from '@/lib/portfolio/summary'
 
@@ -37,11 +37,10 @@ type HoldingsResponse = {
 
 type HistorySnapshot = {
   date: string
-  totalValue?: number
-  totalInvested?: number
-  availableCash?: number
-  totalWealth?: number
-  fundsAdded?: number
+  cash?: number
+  investmentValue?: number
+  niftyValue?: number
+  fdValue?: number
 }
 
 async function fetchHoldings(): Promise<HoldingsResponse> {
@@ -50,8 +49,8 @@ async function fetchHoldings(): Promise<HoldingsResponse> {
   return (await res.json()) as HoldingsResponse
 }
 
-async function fetchHistory(days: number): Promise<HistorySnapshot[]> {
-  const res = await fetch(`/api/portfolio/history?days=${days}`, {
+async function fetchHistory(): Promise<HistorySnapshot[]> {
+  const res = await fetch('/api/portfolio/history?days=all', {
     credentials: 'include',
   })
   if (!res.ok) throw new Error(`Failed (${res.status})`)
@@ -62,8 +61,8 @@ async function fetchHistory(days: number): Promise<HistorySnapshot[]> {
 export function PortfolioCharts() {
   const holdingsQuery = useQuery({ queryKey: ['holdings'], queryFn: fetchHoldings })
   const historyQuery = useQuery({
-    queryKey: ['portfolio-history', 90],
-    queryFn: () => fetchHistory(90),
+    queryKey: ['portfolio-history', 'all'],
+    queryFn: fetchHistory,
   })
 
   const allocationByInstrument: AllocationByInstrumentDatum[] = useMemo(() => {
@@ -105,15 +104,14 @@ export function PortfolioCharts() {
       .sort((a, b) => b.pnl - a.pnl)
   }, [holdingsQuery.data])
 
-  const portfolioValueSeries: PortfolioValueDatum[] = useMemo(() => {
+  const wealthHistorySeries: WealthHistoryDatum[] = useMemo(() => {
     const snapshots = historyQuery.data ?? []
     return snapshots.map((s) => ({
       date: new Date(s.date).toISOString().slice(0, 10),
-      // Fall back to holdings value + cash for older snapshots written before
-      // totalWealth was recorded.
-      totalWealth:
-        s.totalWealth ?? (s.totalValue ?? 0) + (s.availableCash ?? 0),
-      fundsAdded: s.fundsAdded ?? s.totalInvested ?? 0,
+      cash: s.cash ?? 0,
+      investmentValue: s.investmentValue ?? 0,
+      niftyValue: s.niftyValue ?? 0,
+      fdValue: s.fdValue ?? 0,
     }))
   }, [historyQuery.data])
 
@@ -156,18 +154,18 @@ export function PortfolioCharts() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Total wealth (90 days)</CardTitle>
+          <CardTitle>Wealth history</CardTitle>
           <CardDescription>
-            Daily holdings value + cash, with funds-added baseline
+            Your investments vs Nifty, FD @ 7.5%, and cash
           </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoadingHistory ? (
             <Skeleton className="h-[280px] w-full" />
-          ) : portfolioValueSeries.length === 0 ? (
+          ) : wealthHistorySeries.length === 0 ? (
             <EmptyChart>No daily snapshots yet — runs after market close.</EmptyChart>
           ) : (
-            <PortfolioValueArea data={portfolioValueSeries} />
+            <WealthHistoryChart data={wealthHistorySeries} />
           )}
         </CardContent>
       </Card>

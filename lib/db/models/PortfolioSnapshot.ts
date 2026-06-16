@@ -1,19 +1,18 @@
 import mongoose, { Schema, type InferSchemaType, type Model } from 'mongoose'
 
+// One persisted point on the wealth-history chart, keyed uniquely by trading day.
+// The whole series is rebuilt and upserted by the daily snapshot job, so each
+// run is idempotent and self-healing.
 const portfolioSnapshotSchema = new Schema({
   date: { type: Date, required: true, unique: true },
-  // Market value of open holdings only.
-  totalValue: { type: Number },
-  // Cost basis of open holdings.
-  totalInvested: { type: Number },
-  // Uninvested cash sitting in the trading account (fundsAdded − netInvested).
-  availableCash: { type: Number },
-  // Total wealth recorded for the day: holdings market value + available cash.
-  totalWealth: { type: Number },
-  // Total capital deposited into the account — the baseline for total wealth.
-  fundsAdded: { type: Number },
-  unrealizedPnL: { type: Number },
-  realizedPnL: { type: Number },
+  // Available cash that day: fundsAdded − netInvested (approximate-from-trades).
+  cash: { type: Number },
+  // Market value of open holdings that day.
+  investmentValue: { type: Number },
+  // Total invested capital grown at Nifty's return since the first purchase.
+  niftyValue: { type: Number },
+  // Total invested capital grown at the FD rate since the first purchase.
+  fdValue: { type: Number },
 })
 
 export type PortfolioSnapshotDoc = InferSchemaType<typeof portfolioSnapshotSchema>
