@@ -208,6 +208,7 @@ function CommonStocksPanel({
                 <TableHead>Symbol</TableHead>
                 <TableHead>Group</TableHead>
                 <TableHead className="text-right">Entry</TableHead>
+                <TableHead className="text-right">Current</TableHead>
                 <TableHead className="text-right">SL</TableHead>
                 <TableHead className="text-right">TP1</TableHead>
                 <TableHead className="text-right">TP2</TableHead>
@@ -231,6 +232,11 @@ function CommonStocksPanel({
                       </TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(e.entryPrice)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {e.currentPrice !== null
+                          ? formatCurrency(e.currentPrice)
+                          : '—'}
                       </TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(e.stopLoss)}

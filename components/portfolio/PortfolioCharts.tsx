@@ -39,6 +39,9 @@ type HistorySnapshot = {
   date: string
   totalValue?: number
   totalInvested?: number
+  availableCash?: number
+  totalWealth?: number
+  fundsAdded?: number
 }
 
 async function fetchHoldings(): Promise<HoldingsResponse> {
@@ -106,8 +109,11 @@ export function PortfolioCharts() {
     const snapshots = historyQuery.data ?? []
     return snapshots.map((s) => ({
       date: new Date(s.date).toISOString().slice(0, 10),
-      totalValue: s.totalValue ?? 0,
-      totalInvested: s.totalInvested ?? 0,
+      // Fall back to holdings value + cash for older snapshots written before
+      // totalWealth was recorded.
+      totalWealth:
+        s.totalWealth ?? (s.totalValue ?? 0) + (s.availableCash ?? 0),
+      fundsAdded: s.fundsAdded ?? s.totalInvested ?? 0,
     }))
   }, [historyQuery.data])
 
@@ -150,9 +156,9 @@ export function PortfolioCharts() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Portfolio value (90 days)</CardTitle>
+          <CardTitle>Total wealth (90 days)</CardTitle>
           <CardDescription>
-            Daily snapshots with invested baseline reference
+            Daily holdings value + cash, with funds-added baseline
           </CardDescription>
         </CardHeader>
         <CardContent>

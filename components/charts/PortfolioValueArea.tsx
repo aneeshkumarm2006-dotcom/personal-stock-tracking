@@ -23,8 +23,8 @@ import {
 
 export type PortfolioValueDatum = {
   date: string
-  totalValue: number
-  totalInvested: number
+  totalWealth: number
+  fundsAdded: number
 }
 
 export type PortfolioValueAreaProps = {
@@ -36,7 +36,7 @@ export function PortfolioValueArea({
   data,
   height = 280,
 }: PortfolioValueAreaProps) {
-  const latestInvested = data.at(-1)?.totalInvested
+  const latestFundsAdded = data.at(-1)?.fundsAdded
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -56,14 +56,14 @@ export function PortfolioValueArea({
           itemStyle={tooltipItemStyle}
           formatter={(value) => formatCurrency(Number(value))}
         />
-        {typeof latestInvested === 'number' && (
+        {typeof latestFundsAdded === 'number' && (
           <ReferenceLine
-            y={latestInvested}
+            y={latestFundsAdded}
             strokeDasharray="4 4"
             stroke="var(--muted-foreground)"
             strokeOpacity={0.6}
             label={{
-              value: 'Invested',
+              value: 'Funds added',
               position: 'insideTopRight',
               fontSize: 11,
               fill: 'var(--muted-foreground)',
@@ -72,11 +72,11 @@ export function PortfolioValueArea({
         )}
         <Area
           type="monotone"
-          dataKey="totalValue"
+          dataKey="totalWealth"
           stroke="var(--chart-1)"
           strokeWidth={2}
           fill="url(#portfolioValueFill)"
-          name="Portfolio value"
+          name="Total wealth"
           activeDot={{ r: 3, strokeWidth: 0 }}
         />
       </AreaChart>
