@@ -27,6 +27,7 @@ export type EntryForStats = {
   triggerType?: TriggerType | null
   status: StrategyEntryStatus
   events?: StrategyEvent[]
+  tags?: string[]
 }
 
 export type EntryStats = {
@@ -54,6 +55,7 @@ export type EntryStats = {
   realizedPnL: number
   unrealizedPnL: number
   totalPnL: number
+  tags: string[]
 }
 
 export type GroupStats = {
@@ -156,6 +158,7 @@ export function computeGroupStats(
       realizedPnL: realized,
       unrealizedPnL: unrealized,
       totalPnL: round2(realized + unrealized),
+      tags: e.tags ?? [],
     })
   }
 

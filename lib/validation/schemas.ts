@@ -131,6 +131,13 @@ export const strategyEntryUpdateSchema = strategyEntryBaseSchema
 
 export type StrategyEntryInput = z.infer<typeof strategyEntrySchema>
 
+// Replace the full tag set on a strategy entry. An empty array clears tags.
+export const strategyEntryTagsSchema = z.object({
+  tags: z.array(z.string()).max(50, 'too many tags'),
+})
+
+export type StrategyEntryTagsInput = z.infer<typeof strategyEntryTagsSchema>
+
 export const manualCloseSchema = z.object({
   closePrice: z.number().positive('closePrice must be greater than zero'),
   closeDate: dateLike,

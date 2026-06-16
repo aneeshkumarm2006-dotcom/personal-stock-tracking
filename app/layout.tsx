@@ -26,7 +26,7 @@ export default function RootLayout({
         <QueryProvider>
           <Nav />
           <main className="flex flex-1 flex-col">{children}</main>
-          <Toaster richColors position="top-right" />
+          <Toaster richColors position="bottom-right" />
         </QueryProvider>
       </body>
     </html>

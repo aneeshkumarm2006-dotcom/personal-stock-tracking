@@ -1,10 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import { PencilIcon, XIcon } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { PencilIcon, Trash2Icon, XIcon } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import {
   Table,
@@ -18,6 +28,7 @@ import { formatCurrency, formatInt, pnlColorClass } from '@/lib/format'
 import type { EntryStats } from '@/lib/strategy/group'
 import { ManualCloseDialog } from './ManualCloseDialog'
 import { EditEntryDialog } from './EditEntryDialog'
+import { StrategyEntryTags } from './StrategyEntryTags'
 
 export type EntriesTableProps = {
   groupId: string
@@ -112,8 +123,41 @@ export function EntriesTable({
   allowClose = true,
   capitalFree = 0,
 }: EntriesTableProps) {
+  const queryClient = useQueryClient()
   const [closing, setClosing] = useState<EntryStats | null>(null)
   const [editing, setEditing] = useState<EntryStats | null>(null)
+  const [deleting, setDeleting] = useState<EntryStats | null>(null)
+  const [deletePending, setDeletePending] = useState(false)
+
+  async function confirmDelete() {
+    if (!deleting?.id) return
+    setDeletePending(true)
+    try {
+      const res = await fetch(`/api/strategy/entries/${deleting.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        let message = `Failed (${res.status})`
+        try {
+          const data = (await res.json()) as { error?: string }
+          if (data?.error) message = data.error
+        } catch {}
+        toast.error(message)
+        return
+      }
+      toast.success('Entry deleted')
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['strategyGroup', groupId] }),
+        queryClient.invalidateQueries({ queryKey: ['strategyGroups'] }),
+      ])
+      setDeleting(null)
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setDeletePending(false)
+    }
+  }
 
   if (entries.length === 0) {
     return (
@@ -143,6 +187,7 @@ export function EntriesTable({
               <TableHead className="text-right">Current</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">P&L</TableHead>
+              <TableHead>Tags</TableHead>
               {allowClose && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
@@ -156,6 +201,8 @@ export function EntriesTable({
                 e.status === 'trailing'
               // Only entries that haven't filled yet can have their levels edited.
               const canEdit = e.status === 'pending'
+              // Open entries can be deleted outright; settled ones stay in history.
+              const canDelete = canClose
               const stopMoved = e.activeStop !== e.stopLoss
               const key = e.id ?? `${e.instrumentToken}-${e.entryPrice}`
               return (
@@ -198,6 +245,17 @@ export function EntriesTable({
                       ? '—'
                       : formatCurrency(e.totalPnL)}
                   </TableCell>
+                  <TableCell>
+                    {e.id ? (
+                      <StrategyEntryTags
+                        entryId={e.id}
+                        groupId={groupId}
+                        tags={e.tags}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
+                  </TableCell>
                   {allowClose && (
                     <TableCell className="text-right">
                       {e.id && (canClose || canEdit) ? (
@@ -222,6 +280,18 @@ export function EntriesTable({
                               title="Close"
                             >
                               <XIcon className="size-3.5" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              size="icon-xs"
+                              variant="outline"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setDeleting(e)}
+                              aria-label="Delete entry"
+                              title="Delete"
+                            >
+                              <Trash2Icon className="size-3.5" />
                             </Button>
                           )}
                         </div>
@@ -257,6 +327,42 @@ export function EntriesTable({
           onClose={() => setEditing(null)}
         />
       )}
+
+      <Dialog
+        open={deleting !== null}
+        onOpenChange={(next) => {
+          if (!deletePending && !next) setDeleting(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-sm" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete this entry?</DialogTitle>
+            <DialogDescription>
+              {deleting
+                ? `“${deleting.instrumentSymbol || deleting.instrumentToken}” will be permanently removed from this group and its reserved capital freed. This can’t be undone.`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleting(null)}
+              disabled={deletePending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deletePending}
+            >
+              {deletePending ? 'Deleting…' : 'Delete entry'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

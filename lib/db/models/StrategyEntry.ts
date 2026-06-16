@@ -67,6 +67,9 @@ const strategyEntrySchema = new Schema(
       default: 'pending',
     },
     events: { type: [strategyEventSchema], default: [] },
+    // Free-form labels for organising entries (e.g. "swing", "earnings",
+    // "mistake"). Editable on any entry regardless of status.
+    tags: { type: [String], default: [] },
   },
   { timestamps: true },
 )

@@ -8,6 +8,7 @@ import { strategyEntryUpdateSchema } from '@/lib/validation/schemas'
 import {
   entryTriggered,
   resolveTriggerType,
+  TERMINAL_ENTRY_STATUSES,
   type RequestedTriggerType,
 } from '@/lib/strategy/evaluate'
 import { fetchReferencePrice } from '@/lib/prices/reference'
@@ -157,9 +158,11 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
   if (!existing) {
     return NextResponse.json({ error: 'Entry not found' }, { status: 404 })
   }
-  if (existing.status !== 'pending') {
+  // Only open entries (pending/active/partial/trailing) can be deleted. Settled
+  // entries are kept so their realized P&L stays in the group's history.
+  if ((TERMINAL_ENTRY_STATUSES as readonly string[]).includes(existing.status)) {
     return NextResponse.json(
-      { error: 'Only pending entries can be deleted' },
+      { error: 'Closed entries cannot be deleted' },
       { status: 409 },
     )
   }
