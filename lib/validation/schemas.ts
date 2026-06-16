@@ -92,9 +92,11 @@ const strategyEntryBaseSchema = z.object({
   quantity: positiveInt,
   direction: z.enum(['long']).default('long'),
   // How a pending entry should fill. 'auto' lets the server decide off the live
-  // price (breakout vs dip); 'limit'/'stop' force the choice. Resolved to a
-  // concrete 'limit'|'stop' before the entry is stored.
-  triggerType: z.enum(['auto', 'limit', 'stop']).default('auto'),
+  // price (breakout vs dip); 'limit'/'stop' force the choice. 'active' means the
+  // position is already held — the entry is recorded as filled immediately
+  // rather than waiting for a trigger. Resolved to a concrete 'limit'|'stop'
+  // before the entry is stored.
+  triggerType: z.enum(['auto', 'limit', 'stop', 'active']).default('auto'),
 })
 
 export const strategyEntrySchema = strategyEntryBaseSchema.superRefine(

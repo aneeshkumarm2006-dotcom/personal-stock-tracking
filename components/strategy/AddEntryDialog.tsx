@@ -55,7 +55,7 @@ const formSchema = z
       (v) => (v === '' || v === null || v === undefined ? Number.NaN : Number(v)),
       z.number().int('Whole number only').positive('Must be greater than 0'),
     ),
-    triggerType: z.enum(['auto', 'limit', 'stop']).default('auto'),
+    triggerType: z.enum(['auto', 'limit', 'stop', 'active']).default('auto'),
   })
   .superRefine((data, ctx) => {
     if (data.stopLoss >= data.entryPrice) {
@@ -136,6 +136,9 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
   const target2 = num(watched.target2)
   const quantity = num(watched.quantity)
   const triggerChoice = watched.triggerType ?? 'auto'
+  // The position is already held: it's recorded as open immediately, so the
+  // fill-direction preview and immediate-trigger guard don't apply.
+  const alreadyEntered = triggerChoice === 'active'
 
   const instrumentToken = watched.instrumentToken
 
@@ -182,7 +185,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
   // Warn when the entry would fill the instant it's saved (mirrors the server
   // guard) so the user can fix it before the request is rejected.
   const wouldTriggerNow =
-    currentPrice !== null && Number.isFinite(entryPrice)
+    !alreadyEntered && currentPrice !== null && Number.isFinite(entryPrice)
       ? resolvedTrigger === 'stop'
         ? currentPrice >= entryPrice
         : currentPrice <= entryPrice
@@ -468,10 +471,17 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
                 <SelectItem value="auto">Auto (decide from current price)</SelectItem>
                 <SelectItem value="stop">Breakout — price rises to entry</SelectItem>
                 <SelectItem value="limit">Dip — price falls to entry</SelectItem>
+                <SelectItem value="active">Already entered — I hold this now</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-muted-foreground text-xs">
-              {currentPrice !== null ? (
+              {alreadyEntered ? (
+                <>
+                  Recorded as already open at{' '}
+                  {Number.isFinite(entryPrice) ? formatCurrency(entryPrice) : '—'}. It
+                  starts active and is tracked for target and stop from now.
+                </>
+              ) : currentPrice !== null ? (
                 <>
                   Current price {formatCurrency(currentPrice)}.{' '}
                   {Number.isFinite(entryPrice) && (

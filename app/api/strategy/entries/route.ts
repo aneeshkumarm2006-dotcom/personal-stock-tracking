@@ -105,17 +105,23 @@ export async function POST(request: Request) {
     )
   }
 
+  // 'active' means the user already holds the position: skip the fill machinery
+  // and record it as open from the entry price right away (the evaluator then
+  // tracks it for TP/SL like any other active entry).
+  const alreadyEntered = data.triggerType === 'active'
+
   // Resolve how this entry fills before it is stored. The reference price (live
   // quote, or last snapshot) lets 'auto' tell a breakout from a dip buy, and
   // guards against an order that would fill the instant it is created.
   const referencePrice = await fetchReferencePrice(data.instrumentToken)
   const triggerType = resolveTriggerType(
-    data.triggerType,
+    data.triggerType === 'active' ? 'auto' : data.triggerType,
     data.entryPrice,
     referencePrice,
   )
 
   if (
+    !alreadyEntered &&
     referencePrice !== null &&
     entryTriggered(triggerType, data.entryPrice, referencePrice)
   ) {
@@ -136,6 +142,14 @@ export async function POST(request: Request) {
     ...data,
     triggerType,
     ...(referencePrice !== null ? { referencePrice } : {}),
+    ...(alreadyEntered
+      ? {
+          status: 'active',
+          events: [
+            { type: 'entry_hit', price: data.entryPrice, timestamp: new Date() },
+          ],
+        }
+      : {}),
   })
   return NextResponse.json(created.toJSON(), { status: 201 })
 }
