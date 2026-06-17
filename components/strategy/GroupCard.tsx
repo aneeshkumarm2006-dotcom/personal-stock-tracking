@@ -171,7 +171,11 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
               />
             )}
             {isActive && (
-              <AddEntryDialog groupId={groupId} capitalFree={stats.capitalFree} />
+              <AddEntryDialog
+                groupId={groupId}
+                groupName={group.name}
+                capitalFree={stats.capitalFree}
+              />
             )}
             {isActive && (
               <Button

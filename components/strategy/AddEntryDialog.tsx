@@ -86,6 +86,7 @@ type ParsedValues = z.output<typeof formSchema>
 
 export type AddEntryDialogProps = {
   groupId: string
+  groupName: string
   capitalFree: number
 }
 
@@ -95,7 +96,11 @@ function num(value: unknown): number {
   return Number.isFinite(n) ? n : Number.NaN
 }
 
-export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
+export function AddEntryDialog({
+  groupId,
+  groupName,
+  capitalFree,
+}: AddEntryDialogProps) {
   const [open, setOpen] = useState(false)
   const queryClient = useQueryClient()
 
@@ -340,7 +345,7 @@ export function AddEntryDialog({ groupId, capitalFree }: AddEntryDialogProps) {
       <DialogTrigger render={<Button size="sm">Add entry</Button>} />
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add strategy entry</DialogTitle>
+          <DialogTitle>Add strategy entry — {groupName}</DialogTitle>
           <DialogDescription>
             Define an entry, stop loss, and target price. The entry is tracked
             against live prices and closes automatically at target or stop.

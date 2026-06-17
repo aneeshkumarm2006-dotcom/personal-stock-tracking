@@ -187,7 +187,7 @@ export function EntriesTable({
               <TableHead className="text-right">Current</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">P&L</TableHead>
-              <TableHead>Tags</TableHead>
+              <TableHead className="min-w-[240px]">Tags</TableHead>
               {allowClose && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
@@ -245,7 +245,7 @@ export function EntriesTable({
                       ? '—'
                       : formatCurrency(e.totalPnL)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="min-w-[240px]">
                     {e.id ? (
                       <StrategyEntryTags
                         entryId={e.id}
