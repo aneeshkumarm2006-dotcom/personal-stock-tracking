@@ -14,8 +14,9 @@ import {
 } from '@/components/ui/table'
 import { EmptyState, ErrorState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCurrency, formatInt, formatIstTime, formatPercent, pnlColorClass } from '@/lib/format'
+import { formatIstTime, pnlColorClass } from '@/lib/format'
 import type { EnrichedHolding } from '@/lib/portfolio/summary'
+import { AnimatedNumber } from '@/components/ui/AnimatedNumber'
 import { HoldingTagsEditor } from './HoldingTagsEditor'
 
 type HoldingWithTags = EnrichedHolding & { tags?: string[] }
@@ -162,19 +163,29 @@ export function HoldingsTable({ initialData }: HoldingsTableProps) {
                     tags={h.tags ?? []}
                   />
                 </TableCell>
-                <TableCell className="text-right">{formatInt(h.netQty)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(h.avgBuyPrice)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(h.totalInvested)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(h.currentPrice)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(h.currentValue)}</TableCell>
+                <TableCell className="text-right">
+                  <AnimatedNumber value={h.netQty} format="int" />
+                </TableCell>
+                <TableCell className="text-right">
+                  <AnimatedNumber value={h.avgBuyPrice} format="currency" />
+                </TableCell>
+                <TableCell className="text-right">
+                  <AnimatedNumber value={h.totalInvested} format="currency" />
+                </TableCell>
+                <TableCell className="text-right">
+                  <AnimatedNumber value={h.currentPrice} format="currency" />
+                </TableCell>
+                <TableCell className="text-right">
+                  <AnimatedNumber value={h.currentValue} format="currency" />
+                </TableCell>
                 <TableCell className={`text-right ${pnlColorClass(h.unrealizedPnL)}`}>
-                  {formatCurrency(h.unrealizedPnL)}
+                  <AnimatedNumber value={h.unrealizedPnL} format="currency" />
                 </TableCell>
                 <TableCell className={`text-right ${pnlColorClass(h.unrealizedPnLPct)}`}>
-                  {formatPercent(h.unrealizedPnLPct)}
+                  <AnimatedNumber value={h.unrealizedPnLPct} format="percent" />
                 </TableCell>
                 <TableCell className={`text-right ${pnlColorClass(h.dayChangePct)}`}>
-                  {formatPercent(h.dayChangePct)}
+                  <AnimatedNumber value={h.dayChangePct} format="percent" />
                 </TableCell>
               </TableRow>
             ))}

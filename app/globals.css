@@ -108,3 +108,51 @@
     @apply bg-foreground/90 text-background;
   }
 }
+
+/*
+  Live-value flash. When an animated figure ticks up, a green wash fills the
+  number from the bottom up; when it ticks down, a red wash fills from the top
+  down. The fill grows via clip-path, then fades out. Used by AnimatedNumber.
+*/
+@keyframes flash-up {
+  0% {
+    clip-path: inset(100% 0 0 0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 0;
+  }
+}
+
+@keyframes flash-down {
+  0% {
+    clip-path: inset(0 0 100% 0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 0;
+  }
+}
+
+.animate-flash-up {
+  animation: flash-up 0.7s ease-out forwards;
+}
+
+.animate-flash-down {
+  animation: flash-down 0.7s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-flash-up,
+  .animate-flash-down {
+    animation: none;
+  }
+}

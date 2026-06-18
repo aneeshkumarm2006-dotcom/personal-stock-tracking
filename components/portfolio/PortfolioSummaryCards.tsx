@@ -1,6 +1,7 @@
-import { formatCurrency, formatPercent, pnlColorClass } from '@/lib/format'
+import { pnlColorClass } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { PortfolioSummary } from '@/lib/portfolio/summary'
+import { AnimatedNumber } from '@/components/ui/AnimatedNumber'
 
 export type PortfolioSummaryCardsProps = {
   summary: PortfolioSummary
@@ -8,8 +9,8 @@ export type PortfolioSummaryCardsProps = {
 
 type Metric = {
   label: string
-  value: string
-  hint?: string
+  value: number
+  hint?: number
   valueClass?: string
 }
 
@@ -29,23 +30,23 @@ export function PortfolioSummaryCards({ summary }: PortfolioSummaryCardsProps) {
       : 0
 
   const metrics: Metric[] = [
-    { label: 'Total invested', value: formatCurrency(summary.totalInvested) },
-    { label: 'Current value', value: formatCurrency(summary.totalCurrentValue) },
+    { label: 'Total invested', value: summary.totalInvested },
+    { label: 'Current value', value: summary.totalCurrentValue },
     {
       label: 'Unrealized P&L',
-      value: formatCurrency(summary.totalUnrealizedPnL),
-      hint: formatPercent(unrealizedPct),
+      value: summary.totalUnrealizedPnL,
+      hint: unrealizedPct,
       valueClass: pnlColorClass(summary.totalUnrealizedPnL),
     },
     {
       label: 'Realized P&L',
-      value: formatCurrency(summary.totalRealizedPnL),
+      value: summary.totalRealizedPnL,
       valueClass: pnlColorClass(summary.totalRealizedPnL),
     },
     {
       label: "Today's change",
-      value: formatCurrency(summary.totalDayChange),
-      hint: formatPercent(summary.dayChangePct),
+      value: summary.totalDayChange,
+      hint: summary.dayChangePct,
       valueClass: pnlColorClass(summary.totalDayChange),
     },
   ]
@@ -56,23 +57,24 @@ export function PortfolioSummaryCards({ summary }: PortfolioSummaryCardsProps) {
         <div key={m.label} className={cn('px-4 py-3.5', CELL_BORDERS[idx])}>
           <dt className="text-muted-foreground text-xs">{m.label}</dt>
           <dd className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
-            <span
+            <AnimatedNumber
+              value={m.value}
+              format="currency"
+              flash
               className={cn(
-                'text-lg leading-tight font-semibold tracking-tight tabular-nums',
+                'text-lg leading-tight font-semibold tracking-tight',
                 m.valueClass
               )}
-            >
-              {m.value}
-            </span>
-            {m.hint ? (
-              <span
+            />
+            {m.hint !== undefined ? (
+              <AnimatedNumber
+                value={m.hint}
+                format="percent"
                 className={cn(
-                  'text-xs font-medium tabular-nums',
+                  'text-xs font-medium',
                   m.valueClass ?? 'text-muted-foreground'
                 )}
-              >
-                {m.hint}
-              </span>
+              />
             ) : null}
           </dd>
         </div>

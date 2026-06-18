@@ -10,6 +10,7 @@ import { computeSummary } from '@/lib/portfolio/summary'
 import { loadSnapshotsForTokens } from '@/lib/prices/snapshots'
 
 import { PageHeader, SectionHeader } from '@/components/PageHeader'
+import { PortfolioLivePrices } from '@/components/portfolio/PortfolioLivePrices'
 import { PortfolioSummaryCards } from '@/components/portfolio/PortfolioSummaryCards'
 import { CashCard } from '@/components/portfolio/CashCard'
 import { HoldingsTable } from '@/components/portfolio/HoldingsTable'
@@ -52,6 +53,8 @@ export default async function PortfolioPage() {
         description="Live holdings, P&L and history powered by Angel One."
         actions={<AddTransactionDialog />}
       />
+
+      <PortfolioLivePrices />
 
       <PortfolioSummaryCards summary={summary} />
 
