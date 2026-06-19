@@ -33,6 +33,10 @@ export type SmartApiClient = {
     fromdate: string
     todate: string
   }) => Promise<SmartApiResponse<Array<Array<string | number>>>>
+  // Portfolio endpoints (authorized by the same session as marketData).
+  getAllHolding: () => Promise<SmartApiResponse<unknown>>
+  getRMS: () => Promise<SmartApiResponse<unknown>>
+  getTradeBook: () => Promise<SmartApiResponse<unknown>>
 }
 
 let cached: SmartApiClient | null = null

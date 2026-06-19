@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/jobs/refresh", "schedule": "* 3-10 * * 1-5" },
+    { "path": "/api/jobs/holdings-sync", "schedule": "2 10 * * 1-5" },
     { "path": "/api/jobs/snapshot", "schedule": "5 10 * * 1-5" },
     { "path": "/api/jobs/scrip-master", "schedule": "0 2 * * 1-5" },
     { "path": "/api/jobs/session-prewarm", "schedule": "10 3 * * 1-5" }

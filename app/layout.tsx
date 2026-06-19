@@ -22,7 +22,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="bg-background text-foreground flex min-h-full flex-col">
+      {/* suppressHydrationWarning: browser extensions (e.g. Grammarly) inject
+          data-* attributes onto <body> before hydration, causing a harmless
+          attribute mismatch. This suppresses that warning for <body> only. */}
+      <body
+        className="bg-background text-foreground flex min-h-full flex-col"
+        suppressHydrationWarning
+      >
         <QueryProvider>
           <Nav />
           <main className="flex flex-1 flex-col">{children}</main>

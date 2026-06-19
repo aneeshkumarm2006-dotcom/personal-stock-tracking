@@ -32,6 +32,7 @@ import {
   InstrumentTypeahead,
   type InstrumentResult,
 } from '@/components/portfolio/InstrumentTypeahead'
+import { InlineTagsInput } from '@/components/strategy/InlineTagsInput'
 
 const numberInput = z.preprocess(
   (v) => (v === '' || v === null || v === undefined ? Number.NaN : Number(v)),
@@ -102,6 +103,7 @@ export function AddEntryDialog({
   capitalFree,
 }: AddEntryDialogProps) {
   const [open, setOpen] = useState(false)
+  const [tags, setTags] = useState<string[]>([])
   const queryClient = useQueryClient()
 
   const form = useForm<FormValues, unknown, ParsedValues>({
@@ -129,6 +131,7 @@ export function AddEntryDialog({
         target2: '',
         quantity: '',
       })
+      setTags([])
     }
   }, [open, form])
 
@@ -318,6 +321,7 @@ export function AddEntryDialog({
           quantity: values.quantity,
           direction: 'long',
           triggerType: values.triggerType ?? 'auto',
+          ...(tags.length > 0 ? { tags } : {}),
         }),
       })
       if (!res.ok) {
@@ -456,6 +460,13 @@ export function AddEntryDialog({
                   {form.formState.errors.target2.message}
                 </p>
               )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="entry-tags">
+                Tags{' '}
+                <span className="text-muted-foreground font-normal">— optional</span>
+              </Label>
+              <InlineTagsInput id="entry-tags" value={tags} onChange={setTags} />
             </div>
           </div>
 

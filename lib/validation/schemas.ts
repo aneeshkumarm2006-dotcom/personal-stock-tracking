@@ -91,6 +91,9 @@ const strategyEntryBaseSchema = z.object({
   target2: z.number().positive('target2 must be greater than zero').optional(),
   quantity: positiveInt,
   direction: z.enum(['long']).default('long'),
+  // Free-form labels captured at creation (e.g. "swing", "earnings"). Editable
+  // later on the entry too. Optional so existing callers keep working.
+  tags: z.array(z.string()).max(50, 'too many tags').optional(),
   // How a pending entry should fill. 'auto' lets the server decide off the live
   // price (breakout vs dip); 'limit'/'stop' force the choice. 'active' means the
   // position is already held — the entry is recorded as filled immediately
