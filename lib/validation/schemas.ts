@@ -81,8 +81,10 @@ export type StrategyGroupInput = z.infer<typeof strategyGroupSchema>
 
 const strategyEntryBaseSchema = z.object({
   groupId: z.string().min(1),
-  instrumentToken: z.string().min(1),
-  instrumentSymbol: z.string().min(1),
+  // Optional: an entry can be saved with just the levels and no stock yet, then
+  // have the stock assigned later via an edit. Empty/absent means "unassigned".
+  instrumentToken: z.string().optional(),
+  instrumentSymbol: z.string().optional(),
   entryPrice: z.number().positive('entryPrice must be greater than zero'),
   stopLoss: z.number().positive('stopLoss must be greater than zero'),
   // First target (TP1).
@@ -104,6 +106,15 @@ const strategyEntryBaseSchema = z.object({
 
 export const strategyEntrySchema = strategyEntryBaseSchema.superRefine(
   (data, ctx) => {
+    // "Already entered" means the position is held right now — that requires
+    // knowing the stock. An unassigned entry can only ever be a pending idea.
+    if (data.triggerType === 'active' && !data.instrumentToken) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['instrumentToken'],
+        message: 'Pick a stock to mark an entry as already held',
+      })
+    }
     if (data.stopLoss >= data.entryPrice) {
       ctx.addIssue({
         code: 'custom',

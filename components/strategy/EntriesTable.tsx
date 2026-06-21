@@ -208,7 +208,11 @@ export function EntriesTable({
               return (
                 <TableRow key={key}>
                   <TableCell className="font-medium">
-                    {e.instrumentSymbol || e.instrumentToken}
+                    {e.instrumentSymbol || e.instrumentToken || (
+                      <span className="text-muted-foreground font-normal italic">
+                        Unassigned
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">{formatCurrency(e.entryPrice)}</TableCell>
                   <TableCell className="text-right">
@@ -312,7 +316,7 @@ export function EntriesTable({
         <ManualCloseDialog
           entryId={closing.id}
           groupId={groupId}
-          symbol={closing.instrumentSymbol || closing.instrumentToken}
+          symbol={closing.instrumentSymbol || closing.instrumentToken || 'Unassigned'}
           currentPrice={closing.currentPrice}
           onClose={() => setClosing(null)}
         />
@@ -340,7 +344,7 @@ export function EntriesTable({
             <DialogTitle>Delete this entry?</DialogTitle>
             <DialogDescription>
               {deleting
-                ? `“${deleting.instrumentSymbol || deleting.instrumentToken}” will be permanently removed from this group and its reserved capital freed. This can’t be undone.`
+                ? `“${deleting.instrumentSymbol || deleting.instrumentToken || 'This unassigned entry'}” will be permanently removed from this group and its reserved capital freed. This can’t be undone.`
                 : null}
             </DialogDescription>
           </DialogHeader>

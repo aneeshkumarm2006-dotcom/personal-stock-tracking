@@ -19,7 +19,11 @@ const strategyEntrySchema = new Schema(
       ref: 'StrategyGroup',
       required: true,
     },
-    instrumentToken: { type: String, required: true },
+    // Optional: an entry can be created with just the levels (entry/SL/TP) and
+    // no stock yet. It sits as `pending` and is left untracked until a stock is
+    // assigned via an edit. Stored as '' (not undefined) when unassigned so the
+    // field stays a string everywhere downstream.
+    instrumentToken: { type: String, default: '' },
     instrumentSymbol: { type: String },
     entryPrice: { type: Number, required: true },
     stopLoss: { type: Number, required: true },

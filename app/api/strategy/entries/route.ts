@@ -105,15 +105,26 @@ export async function POST(request: Request) {
     )
   }
 
+  // An entry can be saved with no stock yet: it sits as a pending idea (just the
+  // levels) until a stock is assigned via an edit. With no token there is no
+  // price to fetch, so the fill-resolution and immediate-trigger guard below are
+  // skipped — they run again when the stock is assigned.
+  const instrumentToken = data.instrumentToken?.trim() ?? ''
+  const hasInstrument = instrumentToken.length > 0
+
   // 'active' means the user already holds the position: skip the fill machinery
   // and record it as open from the entry price right away (the evaluator then
-  // tracks it for TP/SL like any other active entry).
-  const alreadyEntered = data.triggerType === 'active'
+  // tracks it for TP/SL like any other active entry). The schema already rejects
+  // 'active' without a stock, so this only fires for assigned entries.
+  const alreadyEntered = hasInstrument && data.triggerType === 'active'
 
   // Resolve how this entry fills before it is stored. The reference price (live
   // quote, or last snapshot) lets 'auto' tell a breakout from a dip buy, and
-  // guards against an order that would fill the instant it is created.
-  const referencePrice = await fetchReferencePrice(data.instrumentToken)
+  // guards against an order that would fill the instant it is created. With no
+  // stock there is no reference price, so 'auto' falls back to a dip ('limit').
+  const referencePrice = hasInstrument
+    ? await fetchReferencePrice(instrumentToken)
+    : null
   const triggerType = resolveTriggerType(
     data.triggerType === 'active' ? 'auto' : data.triggerType,
     data.entryPrice,
@@ -140,6 +151,7 @@ export async function POST(request: Request) {
 
   const created = await StrategyEntry.create({
     ...data,
+    instrumentToken,
     triggerType,
     ...(referencePrice !== null ? { referencePrice } : {}),
     ...(alreadyEntered

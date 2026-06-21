@@ -6,6 +6,7 @@ import {
   type EvaluatableEntry,
 } from '@/lib/strategy/evaluate'
 import { computeGroupStats } from '@/lib/strategy/group'
+import { strategyEntrySchema } from '@/lib/validation/schemas'
 import type { PriceSnapshotData } from '@/lib/angelone/quotes'
 
 const snap = (token: string, ltp: number): PriceSnapshotData => ({
@@ -219,6 +220,26 @@ describe('evaluateEntries', () => {
     await evaluateEntries([entry], [])
     expect(entry.status).toBe('pending')
     expect(entry.save).not.toHaveBeenCalled()
+  })
+
+  it('unassigned entry (no instrument) is never evaluated, even when old', async () => {
+    // An entry saved with just the levels has an empty token: no snapshot can
+    // match it, so it stays pending and untracked until a stock is assigned.
+    const entry = makeEntry({
+      instrumentToken: '',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      status: 'pending',
+      triggerType: 'limit',
+      createdAt: new Date('2024-06-03T05:30:00Z'),
+    })
+    const now = new Date('2024-06-17T05:30:00Z') // well past the expiry window
+    const out = await evaluateEntries([entry], [snap('T1', 95)], now)
+    expect(entry.status).toBe('pending')
+    expect(entry.events).toHaveLength(0)
+    expect(entry.save).not.toHaveBeenCalled()
+    expect(out.evaluated).toBe(0)
   })
 
   it('TP takes precedence over SL when both could trigger', async () => {
@@ -508,6 +529,33 @@ describe('computeGroupStats', () => {
     expect(expired.realizedPnL).toBe(0)
   })
 
+  it('an unassigned entry still reserves capital and shows no current price', () => {
+    const stats = computeGroupStats(
+      { allocatedCapital: 10000 },
+      [
+        {
+          _id: 'e1',
+          instrumentToken: '', // no stock assigned yet
+          entryPrice: 100,
+          stopLoss: 90,
+          targetPrice: 120,
+          quantity: 10,
+          status: 'pending' as const,
+        },
+      ],
+      [snap('T1', 105)],
+    )
+
+    // Capital is reserved off the planned levels even with no stock.
+    expect(stats.capitalDeployed).toBe(1000)
+    expect(stats.capitalFree).toBe(9000)
+    const entry = stats.entries[0]!
+    expect(entry.instrumentSymbol).toBe('')
+    expect(entry.currentPrice).toBeNull()
+    expect(entry.risk).toBe(100)
+    expect(entry.reward).toBe(200)
+  })
+
   it('returns winRate = 0 when no decided entries exist', () => {
     const stats = computeGroupStats(
       { allocatedCapital: 1000 },
@@ -591,4 +639,51 @@ describe('entryTriggered', () => {
 
   })
 
+})
+
+describe('strategyEntrySchema — optional instrument', () => {
+  const base = {
+    groupId: 'grp1',
+    entryPrice: 100,
+    stopLoss: 90,
+    targetPrice: 120,
+    quantity: 10,
+  }
+
+  it('accepts an entry with no instrument (levels only)', () => {
+    const result = strategyEntrySchema.safeParse(base)
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts an entry with an instrument', () => {
+    const result = strategyEntrySchema.safeParse({
+      ...base,
+      instrumentToken: 'T1',
+      instrumentSymbol: 'SBIN-EQ',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects "already entered" without an instrument', () => {
+    const result = strategyEntrySchema.safeParse({
+      ...base,
+      triggerType: 'active',
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(
+        result.error.issues.some((i) => i.path.includes('instrumentToken')),
+      ).toBe(true)
+    }
+  })
+
+  it('allows "already entered" when an instrument is given', () => {
+    const result = strategyEntrySchema.safeParse({
+      ...base,
+      triggerType: 'active',
+      instrumentToken: 'T1',
+      instrumentSymbol: 'SBIN-EQ',
+    })
+    expect(result.success).toBe(true)
+  })
 })

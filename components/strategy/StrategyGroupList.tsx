@@ -82,6 +82,10 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
 
   const detailsLoading = showCommon && detailQueries.some((q) => q.isLoading)
 
+  // A stable key over the fetched detail data, so the memo below re-runs when
+  // the data changes (not merely when the query array's identity does).
+  const detailDataKey = detailQueries.map((q) => q.data).join(',')
+
   // Group pending entries by symbol, then keep only the symbols that are
   // waiting in 2+ distinct groups — those are the "common" stocks.
   const commonStocks = useMemo<CommonStock[]>(() => {
@@ -93,6 +97,9 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
       const groupName = groups[i]?.name ?? 'Unknown group'
       for (const entry of entries) {
         if (entry.status !== 'pending') continue
+        // Unassigned entries have no stock to match across groups — skip them so
+        // they don't all cluster under an empty symbol.
+        if (!entry.instrumentToken && !entry.instrumentSymbol) continue
         const symbol = entry.instrumentSymbol || entry.instrumentToken
         const list = bySymbol.get(symbol) ?? []
         list.push({ groupName, entry })
@@ -101,15 +108,22 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
     })
 
     const q = search.trim().toLowerCase()
+    const entryTime = (o: CommonOccurrence) =>
+      o.entry.createdAt ? new Date(o.entry.createdAt).getTime() : 0
     return Array.from(bySymbol.entries())
-      .map(([symbol, occurrences]) => ({ symbol, occurrences }))
+      .map(([symbol, occurrences]) => ({
+        symbol,
+        // Newest entry first within a symbol's rows.
+        occurrences: [...occurrences].sort((a, b) => entryTime(b) - entryTime(a)),
+      }))
       .filter(
         (s) => new Set(s.occurrences.map((o) => o.groupName)).size >= 2,
       )
       .filter((s) => !q || s.symbol.toLowerCase().includes(q))
-      .sort((a, b) => a.symbol.localeCompare(b.symbol))
+      // Most recently entered stock at the top; its newest occurrence ranks it.
+      .sort((a, b) => entryTime(b.occurrences[0]) - entryTime(a.occurrences[0]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showCommon, search, groups, detailQueries.map((q) => q.data).join(',')])
+  }, [showCommon, search, groups, detailDataKey])
 
   return (
     <div className="space-y-4">

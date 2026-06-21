@@ -27,6 +27,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { formatCurrency } from '@/lib/format'
+import {
+  InstrumentTypeahead,
+  type InstrumentResult,
+} from '@/components/portfolio/InstrumentTypeahead'
 import type { EntryStats } from '@/lib/strategy/group'
 
 const numberInput = z.preprocess(
@@ -41,6 +45,10 @@ const optionalNumberInput = z.preprocess(
 
 const formSchema = z
   .object({
+    // Optional: an entry can still be unassigned here, and this is where the
+    // stock gets added later. Leaving it blank keeps it unassigned.
+    instrumentToken: z.string().default(''),
+    instrumentSymbol: z.string().default(''),
     entryPrice: numberInput,
     stopLoss: numberInput,
     targetPrice: numberInput,
@@ -102,6 +110,8 @@ export function EditEntryDialog({
   const queryClient = useQueryClient()
 
   const initial: FormValues = {
+    instrumentToken: entry.instrumentToken ?? '',
+    instrumentSymbol: entry.instrumentSymbol ?? '',
     entryPrice: String(entry.entryPrice),
     stopLoss: String(entry.stopLoss),
     targetPrice: String(entry.targetPrice),
@@ -130,15 +140,35 @@ export function EditEntryDialog({
   const target2 = num(watched.target2)
   const quantity = num(watched.quantity)
   const triggerChoice = watched.triggerType ?? 'auto'
+  const instrumentToken = watched.instrumentToken ?? ''
 
-  // Refresh the live price for the (fixed) instrument so the fill-side preview
-  // and the would-trigger-now guard mirror the server.
+  const selectedInstrument = instrumentToken
+    ? { token: instrumentToken, symbol: watched.instrumentSymbol ?? '' }
+    : null
+
+  const handleInstrumentChange = (result: InstrumentResult | null) => {
+    if (result) {
+      form.setValue('instrumentToken', result.token, { shouldValidate: true })
+      form.setValue('instrumentSymbol', result.symbol, { shouldValidate: true })
+    } else {
+      form.setValue('instrumentToken', '', { shouldValidate: true })
+      form.setValue('instrumentSymbol', '', { shouldValidate: true })
+    }
+  }
+
+  // Refresh the live price for the currently-selected instrument so the
+  // fill-side preview and the would-trigger-now guard mirror the server. When
+  // the entry is still unassigned there is no price to show.
   useEffect(() => {
+    if (!instrumentToken) {
+      setCurrentPrice(null)
+      return
+    }
     let cancelled = false
     void (async () => {
       try {
         const res = await fetch(
-          `/api/prices?tokens=${encodeURIComponent(entry.instrumentToken)}`,
+          `/api/prices?tokens=${encodeURIComponent(instrumentToken)}`,
           { credentials: 'include' },
         )
         if (!res.ok) return
@@ -154,7 +184,7 @@ export function EditEntryDialog({
     return () => {
       cancelled = true
     }
-  }, [entry.instrumentToken])
+  }, [instrumentToken])
 
   // Mirrors resolveTriggerType on the server.
   const resolvedTrigger: 'limit' | 'stop' =
@@ -264,6 +294,10 @@ export function EditEntryDialog({
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // Sent so a still-unassigned entry can get its stock here, or an
+          // existing one can be changed before it fills.
+          instrumentToken: values.instrumentToken ?? '',
+          instrumentSymbol: values.instrumentSymbol ?? '',
           entryPrice: values.entryPrice,
           stopLoss: values.stopLoss,
           targetPrice: values.targetPrice,
@@ -292,7 +326,7 @@ export function EditEntryDialog({
     }
   }
 
-  const symbol = entry.instrumentSymbol || entry.instrumentToken
+  const symbol = entry.instrumentSymbol || entry.instrumentToken || 'Unassigned'
 
   return (
     <Dialog
@@ -305,12 +339,29 @@ export function EditEntryDialog({
         <DialogHeader>
           <DialogTitle>Edit entry · {symbol}</DialogTitle>
           <DialogDescription>
-            Adjust the entry, stop loss, targets, or quantity before this idea
-            fills. Only pending entries (not yet triggered) can be edited.
+            Assign or change the stock, and adjust the entry, stop loss, targets,
+            or quantity before this idea fills. Only pending entries (not yet
+            triggered) can be edited.
           </DialogDescription>
         </DialogHeader>
 
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+          <div className="space-y-1.5">
+            <Label>
+              Instrument{' '}
+              <span className="text-muted-foreground font-normal">— optional</span>
+            </Label>
+            <InstrumentTypeahead
+              value={selectedInstrument}
+              onChange={handleInstrumentChange}
+            />
+            <p className="text-muted-foreground text-xs">
+              {selectedInstrument
+                ? 'Once a stock is set, this entry is tracked against its live price.'
+                : 'No stock yet — add one to start tracking this entry against live prices.'}
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="edit-entry-price">Entry price</Label>

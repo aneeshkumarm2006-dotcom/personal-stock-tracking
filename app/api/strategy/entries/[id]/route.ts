@@ -101,19 +101,41 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     }
   }
 
-  // Re-resolve the fill trigger when the entry price or the requested trigger
-  // type changes — a moved entry can flip between a dip buy and a breakout, and
-  // a re-resolved trigger must not fill the instant the edit is saved.
+  // A pending entry may have been saved with no stock yet; an edit is how the
+  // stock gets assigned later. Capture the token before applying the edit so we
+  // can tell when it changes.
+  const previousToken = existing.instrumentToken ?? ''
+
+  // Re-resolve the fill trigger when the entry price, the requested trigger
+  // type, or the assigned stock changes — any of those can flip a dip buy into a
+  // breakout, and a re-resolved trigger must not fill the instant the edit is
+  // saved.
   const entryPriceChanged =
     parsed.data.entryPrice != null && parsed.data.entryPrice !== existing.entryPrice
   const triggerRequested = parsed.data.triggerType
   // triggerType is resolved separately below; never assign the raw 'auto'.
+  // Instrument fields are normalised and assigned explicitly just after.
   const assignable = { ...parsed.data }
   delete assignable.triggerType
+  delete assignable.instrumentToken
+  delete assignable.instrumentSymbol
   Object.assign(existing, assignable)
 
-  if (entryPriceChanged || triggerRequested !== undefined) {
-    const referencePrice = await fetchReferencePrice(existing.instrumentToken)
+  if (parsed.data.instrumentToken !== undefined) {
+    existing.instrumentToken = parsed.data.instrumentToken.trim()
+  }
+  if (parsed.data.instrumentSymbol !== undefined) {
+    existing.instrumentSymbol = parsed.data.instrumentSymbol.trim()
+  }
+
+  const newToken = existing.instrumentToken ?? ''
+  const tokenChanged = newToken !== previousToken
+  const hasToken = newToken.length > 0
+
+  // No stock means no price to resolve against — leave the trigger as-is until a
+  // stock is assigned.
+  if (hasToken && (entryPriceChanged || triggerRequested !== undefined || tokenChanged)) {
+    const referencePrice = await fetchReferencePrice(newToken)
     const triggerType = resolveTriggerType(
       (triggerRequested ?? existing.triggerType ?? 'auto') as RequestedTriggerType,
       merged.entryPrice,

@@ -46,8 +46,10 @@ const optionalNumberInput = z.preprocess(
 
 const formSchema = z
   .object({
-    instrumentToken: z.string().min(1, 'Pick an instrument'),
-    instrumentSymbol: z.string().min(1, 'Pick an instrument'),
+    // Optional: leave blank to save just the levels now and assign the stock
+    // later by editing the entry.
+    instrumentToken: z.string().default(''),
+    instrumentSymbol: z.string().default(''),
     entryPrice: numberInput,
     stopLoss: numberInput,
     targetPrice: numberInput,
@@ -59,6 +61,14 @@ const formSchema = z
     triggerType: z.enum(['auto', 'limit', 'stop', 'active']).default('auto'),
   })
   .superRefine((data, ctx) => {
+    // "Already entered" means the position is held now — that needs a stock.
+    if (data.triggerType === 'active' && !data.instrumentToken) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['instrumentToken'],
+        message: 'Pick a stock to mark this as already held',
+      })
+    }
     if (data.stopLoss >= data.entryPrice) {
       ctx.addIssue({
         code: 'custom',
@@ -230,11 +240,9 @@ export function AddEntryDialog({
 
   const overAllocated = capitalUsed !== null && capitalUsed > capitalFree
 
-  const selectedInstrument = form.watch('instrumentToken')
-    ? {
-        token: form.watch('instrumentToken'),
-        symbol: form.watch('instrumentSymbol'),
-      }
+  const watchedToken = form.watch('instrumentToken')
+  const selectedInstrument = watchedToken
+    ? { token: watchedToken, symbol: form.watch('instrumentSymbol') ?? '' }
     : null
 
   const handleInstrumentChange = (result: InstrumentResult | null) => {
@@ -312,8 +320,13 @@ export function AddEntryDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           groupId,
-          instrumentToken: values.instrumentToken,
-          instrumentSymbol: values.instrumentSymbol,
+          // Omitted entirely when blank so the entry is saved unassigned.
+          ...(values.instrumentToken
+            ? {
+                instrumentToken: values.instrumentToken,
+                instrumentSymbol: values.instrumentSymbol,
+              }
+            : {}),
           entryPrice: values.entryPrice,
           stopLoss: values.stopLoss,
           targetPrice: values.targetPrice,
@@ -358,14 +371,22 @@ export function AddEntryDialog({
 
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
           <div className="space-y-1.5">
-            <Label>Instrument</Label>
+            <Label>
+              Instrument{' '}
+              <span className="text-muted-foreground font-normal">— optional</span>
+            </Label>
             <InstrumentTypeahead
               value={selectedInstrument}
               onChange={handleInstrumentChange}
             />
-            {form.formState.errors.instrumentToken && (
+            {form.formState.errors.instrumentToken ? (
               <p className="text-destructive text-xs">
                 {form.formState.errors.instrumentToken.message}
+              </p>
+            ) : (
+              <p className="text-muted-foreground text-xs">
+                Don’t know the stock yet? Leave this blank — the entry waits
+                untracked until you add the stock by editing it.
               </p>
             )}
           </div>

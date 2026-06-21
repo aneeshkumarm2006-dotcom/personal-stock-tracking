@@ -257,7 +257,11 @@ export default async function StrategyHistoryPage() {
                                   aria-hidden="true"
                                 />
                                 <span className="font-medium">
-                                  {e.instrumentSymbol || e.instrumentToken}
+                                  {e.instrumentSymbol || e.instrumentToken || (
+                                    <span className="text-muted-foreground italic">
+                                      Unassigned
+                                    </span>
+                                  )}
                                 </span>
                                 {statusBadge(e.status)}
                                 <span className="text-muted-foreground text-xs tabular-nums">
