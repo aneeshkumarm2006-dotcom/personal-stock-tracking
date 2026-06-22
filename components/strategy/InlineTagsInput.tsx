@@ -70,7 +70,7 @@ export function InlineTagsInput({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5 rounded-md border p-2">
+      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border px-2.5 py-1 min-h-8">
         {value.map((tag) => (
           <Badge key={tag} variant="secondary" className="gap-1">
             {tag}
@@ -94,7 +94,7 @@ export function InlineTagsInput({
             })
           }
           placeholder={value.length === 0 ? 'Add a tag…' : ''}
-          className="h-6 flex-1 border-0 px-1 shadow-none focus-visible:ring-0"
+          className="h-5 flex-1 border-0 px-0 shadow-none focus-visible:ring-0"
         />
       </div>
 
