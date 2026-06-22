@@ -108,8 +108,8 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
     })
 
     const q = search.trim().toLowerCase()
-    const entryTime = (o: CommonOccurrence) =>
-      o.entry.createdAt ? new Date(o.entry.createdAt).getTime() : 0
+    const entryTime = (o: CommonOccurrence | undefined) =>
+      o?.entry.createdAt ? new Date(o.entry.createdAt).getTime() : 0
     return Array.from(bySymbol.entries())
       .map(([symbol, occurrences]) => ({
         symbol,
