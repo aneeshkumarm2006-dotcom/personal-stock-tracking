@@ -1,8 +1,7 @@
 import { formatInTimeZone } from 'date-fns-tz'
 
 import { getCandles, type CandleData } from '@/lib/angelone/historical'
-import { AuthError } from '@/lib/angelone/errors'
-import { getValidSession, invalidateSession } from '@/lib/angelone/session'
+import { getValidSession } from '@/lib/angelone/session'
 import { connectDB } from '@/lib/db/connect'
 import { CashAccount } from '@/lib/db/models/CashAccount'
 import { Instrument } from '@/lib/db/models/Instrument'
@@ -18,6 +17,16 @@ const NIFTYBEES_SYMBOL = 'NIFTYBEES-EQ'
 
 export const FD_ANNUAL_RATE = 0.075
 
+// Angel One throttles the historical-candle endpoint to a few requests/second
+// and returns HTTP 403 once that is exceeded. Space sequential fetches out to
+// stay under the limit, and back off before retrying a throttled token.
+const CANDLE_REQUEST_SPACING_MS = 400
+const RATE_LIMIT_BACKOFF_MS = 1500
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function istDay(date: Date): string {
   return formatInTimeZone(date, 'Asia/Kolkata', 'yyyy-MM-dd')
 }
@@ -30,9 +39,16 @@ function closesMap(candles: CandleData[]): Map<string, number> {
   return map
 }
 
-// Fetch daily candles, re-authenticating once if the session has expired.
-// Per-instrument failures are swallowed (empty map) so one delisted/illiquid
-// token can't sink the whole history rebuild.
+// Fetch daily candles for one token. NEVER throws: any failure returns an empty
+// map so a single delisted/illiquid/throttled token can't sink the whole history
+// rebuild (which is what was leaving the snapshot collection empty).
+//
+// Angel One's historical endpoint returns 403 when its per-second rate limit is
+// hit, which classifyAngelError surfaces as an AuthError. But the shared session
+// is still valid — other tokens succeed with it — so we must NOT invalidate it
+// and re-login (doing that per failing token triggers a login storm that then
+// gets the login endpoint itself throttled). Instead we just back off and retry
+// this one token once, keeping the existing session.
 async function fetchCandlesSafe(
   token: string,
   exchange: string,
@@ -41,19 +57,15 @@ async function fetchCandlesSafe(
 ): Promise<CandleData[]> {
   try {
     return await getCandles(token, exchange, 'ONE_DAY', from, to)
-  } catch (err) {
-    if (err instanceof AuthError) {
-      await invalidateSession()
+  } catch {
+    try {
+      await sleep(RATE_LIMIT_BACKOFF_MS)
       await getValidSession()
-      try {
-        return await getCandles(token, exchange, 'ONE_DAY', from, to)
-      } catch (retryErr) {
-        logCandleError(token, retryErr)
-        return []
-      }
+      return await getCandles(token, exchange, 'ONE_DAY', from, to)
+    } catch (retryErr) {
+      logCandleError(token, retryErr)
+      return []
     }
-    logCandleError(token, err)
-    return []
   }
 }
 
@@ -146,6 +158,8 @@ export async function buildWealthHistory(): Promise<WealthSeriesPoint[]> {
     const exchange = exchangeByToken.get(token) ?? 'NSE'
     const candles = await fetchCandlesSafe(token, exchange, from, to)
     closesByToken.set(token, closesMap(candles))
+    // Stay under Angel One's historical rate limit between tokens.
+    await sleep(CANDLE_REQUEST_SPACING_MS)
   }
 
   const niftyCloses = await resolveNiftyCloses(from, to)

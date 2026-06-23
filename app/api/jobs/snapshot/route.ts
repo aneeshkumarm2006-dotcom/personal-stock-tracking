@@ -6,6 +6,11 @@ import { PortfolioSnapshot } from '@/lib/db/models/PortfolioSnapshot'
 import { buildWealthHistory } from '@/lib/portfolio/buildWealthHistory'
 
 export const dynamic = 'force-dynamic'
+// Rebuilding the full history fetches throttled Angel One candles for every
+// traded token (sequentially, with rate-limit spacing/back-off), so the job can
+// run ~40s+. Raise the timeout well above Vercel's short default, which would
+// otherwise kill the function before it upserts anything.
+export const maxDuration = 60
 
 // Rebuild the full daily wealth history (cash / investment / Nifty / FD) from the
 // ledger and price history, then upsert every day. The rebuild is idempotent, so

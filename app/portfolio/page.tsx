@@ -34,13 +34,8 @@ export default async function PortfolioPage() {
 
   const cashAccount = (await CashAccount.findOne({ key: 'default' }).lean()) as {
     fundsAdded?: number
-    realizedPnLBaseline?: number
   } | null
-  const summary = computeSummary(
-    holdings,
-    snapshots,
-    cashAccount?.realizedPnLBaseline ?? 0,
-  )
+  const summary = computeSummary(holdings, snapshots)
   const cash = computeCash(
     cashAccount?.fundsAdded ?? 0,
     computeNetInvested(transactions),

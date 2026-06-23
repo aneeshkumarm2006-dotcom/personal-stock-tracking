@@ -73,16 +73,13 @@ export function enrichHoldings(
 export function computeSummary(
   holdings: HoldingData[],
   snapshots: PriceSnapshotData[],
-  // Fixed realized P&L carried over from trades that predate this ledger. Added
-  // on top of the realized P&L derived from the current SELL transactions.
-  realizedPnLBaseline = 0,
 ): PortfolioSummary {
   const enriched = enrichHoldings(holdings, snapshots)
 
   let totalInvested = 0
   let totalCurrentValue = 0
   let totalUnrealizedPnL = 0
-  let totalRealizedPnL = realizedPnLBaseline
+  let totalRealizedPnL = 0
   let totalDayChange = 0
   let totalPrevCloseValue = 0
 
