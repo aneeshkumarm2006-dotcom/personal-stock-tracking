@@ -132,9 +132,32 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const tokenChanged = newToken !== previousToken
   const hasToken = newToken.length > 0
 
-  // No stock means no price to resolve against — leave the trigger as-is until a
-  // stock is assigned.
-  if (hasToken && (entryPriceChanged || triggerRequested !== undefined || tokenChanged)) {
+  // 'active' means the user already holds the position (e.g. an entry first
+  // saved with no stock, now being assigned one the day after it was bought).
+  // Record it as open from the entry price immediately and let the evaluator
+  // track it for TP/SL — the fill-resolution and immediate-trigger guard below
+  // don't apply. Marking an entry as held requires knowing the stock.
+  const markActive = triggerRequested === 'active'
+  if (markActive && !hasToken) {
+    return NextResponse.json(
+      { error: 'Assign a stock before marking this entry as already held' },
+      { status: 400 },
+    )
+  }
+
+  if (markActive) {
+    existing.status = 'active'
+    existing.events.push({
+      type: 'entry_hit',
+      price: existing.entryPrice,
+      timestamp: new Date(),
+    })
+  } else if (
+    // No stock means no price to resolve against — leave the trigger as-is until
+    // a stock is assigned.
+    hasToken &&
+    (entryPriceChanged || triggerRequested !== undefined || tokenChanged)
+  ) {
     const referencePrice = await fetchReferencePrice(newToken)
     const triggerType = resolveTriggerType(
       (triggerRequested ?? existing.triggerType ?? 'auto') as RequestedTriggerType,

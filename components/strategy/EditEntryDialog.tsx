@@ -57,9 +57,17 @@ const formSchema = z
       (v) => (v === '' || v === null || v === undefined ? Number.NaN : Number(v)),
       z.number().int('Whole number only').positive('Must be greater than 0'),
     ),
-    triggerType: z.enum(['auto', 'limit', 'stop']).default('auto'),
+    triggerType: z.enum(['auto', 'limit', 'stop', 'active']).default('auto'),
   })
   .superRefine((data, ctx) => {
+    // "Already entered" means the position is held now — that needs a stock.
+    if (data.triggerType === 'active' && !data.instrumentToken) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['instrumentToken'],
+        message: 'Pick a stock to mark this as already held',
+      })
+    }
     if (data.stopLoss >= data.entryPrice) {
       ctx.addIssue({
         code: 'custom',
@@ -140,6 +148,9 @@ export function EditEntryDialog({
   const target2 = num(watched.target2)
   const quantity = num(watched.quantity)
   const triggerChoice = watched.triggerType ?? 'auto'
+  // The position is already held: it's recorded as open immediately, so the
+  // fill-direction preview and immediate-trigger guard don't apply.
+  const alreadyEntered = triggerChoice === 'active'
   const instrumentToken = watched.instrumentToken ?? ''
 
   const selectedInstrument = instrumentToken
@@ -197,9 +208,10 @@ export function EditEntryDialog({
         : 'limit'
 
   // Warn when the edited entry would fill the instant it is saved (mirrors the
-  // server guard) so the user can fix it before the request is rejected.
+  // server guard) so the user can fix it before the request is rejected. An
+  // already-held entry is recorded as open on purpose, so the guard is skipped.
   const wouldTriggerNow =
-    currentPrice !== null && Number.isFinite(entryPrice)
+    !alreadyEntered && currentPrice !== null && Number.isFinite(entryPrice)
       ? resolvedTrigger === 'stop'
         ? currentPrice >= entryPrice
         : currentPrice <= entryPrice
@@ -355,11 +367,17 @@ export function EditEntryDialog({
               value={selectedInstrument}
               onChange={handleInstrumentChange}
             />
-            <p className="text-muted-foreground text-xs">
-              {selectedInstrument
-                ? 'Once a stock is set, this entry is tracked against its live price.'
-                : 'No stock yet — add one to start tracking this entry against live prices.'}
-            </p>
+            {form.formState.errors.instrumentToken ? (
+              <p className="text-destructive text-xs">
+                {form.formState.errors.instrumentToken.message}
+              </p>
+            ) : (
+              <p className="text-muted-foreground text-xs">
+                {selectedInstrument
+                  ? 'Once a stock is set, this entry is tracked against its live price.'
+                  : 'No stock yet — add one to start tracking this entry against live prices.'}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -472,10 +490,17 @@ export function EditEntryDialog({
                 <SelectItem value="auto">Auto (decide from current price)</SelectItem>
                 <SelectItem value="stop">Breakout — price rises to entry</SelectItem>
                 <SelectItem value="limit">Dip — price falls to entry</SelectItem>
+                <SelectItem value="active">Already entered — I hold this now</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-muted-foreground text-xs">
-              {currentPrice !== null ? (
+              {alreadyEntered ? (
+                <>
+                  Recorded as already open at{' '}
+                  {Number.isFinite(entryPrice) ? formatCurrency(entryPrice) : '—'}. It
+                  starts active and is tracked for target and stop from now.
+                </>
+              ) : currentPrice !== null ? (
                 <>
                   Current price {formatCurrency(currentPrice)}.{' '}
                   {Number.isFinite(entryPrice) && (
