@@ -46,7 +46,8 @@ function sumCharges(charges?: TransactionCharges | null): number {
     (charges.exchFees ?? 0) +
     (charges.gst ?? 0) +
     (charges.stampDuty ?? 0) +
-    (charges.sebiFees ?? 0)
+    (charges.sebiFees ?? 0) +
+    (charges.total ?? 0)
   )
 }
 
@@ -124,16 +125,14 @@ export function buildWealthSeries(input: WealthSeriesInput): WealthSeriesPoint[]
     // Apply every transaction that has happened on or before this day.
     while (txIdx < ordered.length && dayString(ordered[txIdx]!.date) <= day) {
       const tx = ordered[txIdx]!
-      const charge = sumCharges(tx.charges)
       const signedQty = tx.type === 'BUY' ? tx.quantity : -tx.quantity
       qtyByToken.set(
         tx.instrumentToken,
         (qtyByToken.get(tx.instrumentToken) ?? 0) + signedQty,
       )
-      netInvested +=
-        tx.type === 'BUY'
-          ? tx.quantity * tx.price + charge
-          : -(tx.quantity * tx.price - charge)
+      // Charges are excluded from the cash line (Angel One behaviour: a charge
+      // only lifts the ATP, it is not debited from cash — see computeNetInvested).
+      netInvested += tx.type === 'BUY' ? tx.quantity * tx.price : -(tx.quantity * tx.price)
       txIdx++
     }
 

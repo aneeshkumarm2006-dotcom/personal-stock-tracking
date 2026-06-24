@@ -31,6 +31,7 @@ type ApiCharges = {
   gst?: number
   stampDuty?: number
   sebiFees?: number
+  total?: number
 }
 
 type ApiTransaction = {
@@ -54,7 +55,8 @@ function totalCharges(charges?: ApiCharges): number {
     (charges.exchFees ?? 0) +
     (charges.gst ?? 0) +
     (charges.stampDuty ?? 0) +
-    (charges.sebiFees ?? 0)
+    (charges.sebiFees ?? 0) +
+    (charges.total ?? 0)
   )
 }
 

@@ -7,6 +7,9 @@ export const chargesSchema = z.object({
   gst: z.number().min(0).default(0),
   stampDuty: z.number().min(0).default(0),
   sebiFees: z.number().min(0).default(0),
+  // Single combined charge amount (current UI). Legacy rows split the total
+  // across the fields above; consumers sum them all, so either form is valid.
+  total: z.number().min(0).default(0),
 })
 
 export type Charges = z.infer<typeof chargesSchema>
@@ -39,6 +42,7 @@ export const transactionSchema = z.object({
     gst: 0,
     stampDuty: 0,
     sebiFees: 0,
+    total: 0,
   }),
   notes: z.string().optional(),
 })

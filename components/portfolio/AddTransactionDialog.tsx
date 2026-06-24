@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
-import { ChevronDownIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -29,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { formatCurrency } from '@/lib/format'
 import { InstrumentTypeahead, type InstrumentResult } from './InstrumentTypeahead'
 
 const chargeFieldSchema = z
@@ -47,12 +47,7 @@ const formSchema = z.object({
     z.number().positive('Must be greater than 0'),
   ),
   date: z.string().min(1, 'Required'),
-  brokerage: chargeFieldSchema,
-  stt: chargeFieldSchema,
-  exchFees: chargeFieldSchema,
-  gst: chargeFieldSchema,
-  stampDuty: chargeFieldSchema,
-  sebiFees: chargeFieldSchema,
+  charges: chargeFieldSchema,
   notes: z.string().optional(),
 })
 
@@ -74,8 +69,24 @@ export type TransactionFormInitial = {
     gst?: number
     stampDuty?: number
     sebiFees?: number
+    total?: number
   }
   notes?: string
+}
+
+// Collapse a transaction's charges (whether stored as the single `total` or the
+// older six-way split) into one number for the single charges input.
+function sumInitialCharges(charges?: TransactionFormInitial['charges']): number {
+  if (!charges) return 0
+  return (
+    (charges.brokerage ?? 0) +
+    (charges.stt ?? 0) +
+    (charges.exchFees ?? 0) +
+    (charges.gst ?? 0) +
+    (charges.stampDuty ?? 0) +
+    (charges.sebiFees ?? 0) +
+    (charges.total ?? 0)
+  )
 }
 
 export type AddTransactionDialogProps = {
@@ -116,7 +127,6 @@ export function AddTransactionDialog({
     onOpenChange?.(next)
   }
 
-  const [chargesExpanded, setChargesExpanded] = useState(false)
   const queryClient = useQueryClient()
   const router = useRouter()
 
@@ -128,12 +138,7 @@ export function AddTransactionDialog({
       quantity: initial ? String(initial.quantity) : '',
       price: initial ? String(initial.price) : '',
       date: toDateInputValue(initial?.date),
-      brokerage: initial?.charges?.brokerage ?? 0,
-      stt: initial?.charges?.stt ?? 0,
-      exchFees: initial?.charges?.exchFees ?? 0,
-      gst: initial?.charges?.gst ?? 0,
-      stampDuty: initial?.charges?.stampDuty ?? 0,
-      sebiFees: initial?.charges?.sebiFees ?? 0,
+      charges: sumInitialCharges(initial?.charges),
       notes: initial?.notes ?? '',
     }),
     [initial],
@@ -152,6 +157,18 @@ export function AddTransactionDialog({
     ? { token: form.watch('instrumentToken'), symbol: form.watch('instrumentSymbol') }
     : null
 
+  // Live "new ATP" for a BUY: the charge folds into the per-share cost, so the
+  // average traded price becomes price + charges ÷ quantity. (Charges never
+  // touch cash — see computeNetInvested.) Only meaningful for buys.
+  const watchType = form.watch('type')
+  const priceNum = Number(form.watch('price'))
+  const qtyNum = Number(form.watch('quantity'))
+  const chargesNum = Number(form.watch('charges'))
+  const atpPreview =
+    watchType === 'BUY' && priceNum > 0 && qtyNum > 0
+      ? priceNum + (chargesNum > 0 ? chargesNum / qtyNum : 0)
+      : null
+
   const onSubmit: SubmitHandler<ParsedValues> = async (values) => {
     const payload = {
       instrumentToken: values.instrumentToken,
@@ -160,13 +177,16 @@ export function AddTransactionDialog({
       quantity: values.quantity,
       price: values.price,
       date: new Date(values.date).toISOString(),
+      // Store the whole charge in `total`; zero the legacy six so an edited
+      // older transaction collapses cleanly instead of double-counting.
       charges: {
-        brokerage: values.brokerage,
-        stt: values.stt,
-        exchFees: values.exchFees,
-        gst: values.gst,
-        stampDuty: values.stampDuty,
-        sebiFees: values.sebiFees,
+        total: values.charges,
+        brokerage: 0,
+        stt: 0,
+        exchFees: 0,
+        gst: 0,
+        stampDuty: 0,
+        sebiFees: 0,
       },
       notes: values.notes ?? '',
     }
@@ -227,7 +247,8 @@ export function AddTransactionDialog({
         <DialogHeader>
           <DialogTitle>{mode === 'edit' ? 'Edit transaction' : 'Add transaction'}</DialogTitle>
           <DialogDescription>
-            Record a BUY or SELL trade. Charges are optional but improve P&L accuracy.
+            Record a BUY or SELL trade. Charges fold into your average buy price
+            (ATP) — they are not deducted from your available cash.
           </DialogDescription>
         </DialogHeader>
 
@@ -310,48 +331,34 @@ export function AddTransactionDialog({
             <Input id="tx-notes" type="text" placeholder="Optional" {...form.register('notes')} />
           </div>
 
-          <div className="overflow-hidden rounded-lg border">
-            <button
-              type="button"
-              aria-expanded={chargesExpanded}
-              className="hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-3 py-2 text-sm transition-colors"
-              onClick={() => setChargesExpanded((v) => !v)}
-            >
-              <span>Charges (brokerage, STT, GST…)</span>
-              <ChevronDownIcon
-                className={`text-muted-foreground size-3.5 shrink-0 transition-transform ${chargesExpanded ? 'rotate-180' : ''}`}
-                aria-hidden="true"
-              />
-            </button>
-            {chargesExpanded && (
-              <div className="grid grid-cols-2 gap-3 border-t p-3 sm:grid-cols-3">
-                {(
-                  [
-                    ['brokerage', 'Brokerage'],
-                    ['stt', 'STT'],
-                    ['exchFees', 'Exch. Fees'],
-                    ['gst', 'GST'],
-                    ['stampDuty', 'Stamp Duty'],
-                    ['sebiFees', 'SEBI Fees'],
-                  ] as const
-                ).map(([name, label]) => (
-                  <div key={name} className="space-y-1.5">
-                    <Label htmlFor={`tx-${name}`} className="text-xs">
-                      {label}
-                    </Label>
-                    <Input
-                      id={`tx-${name}`}
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      inputMode="decimal"
-                      {...form.register(name)}
-                    />
-                  </div>
-                ))}
-              </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="tx-charges">Charges (₹)</Label>
+            <Input
+              id="tx-charges"
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              placeholder="0"
+              {...form.register('charges')}
+            />
+            <p className="text-muted-foreground text-xs">
+              Total brokerage &amp; taxes. Folds into your average buy price — not
+              taken out of your cash.
+            </p>
+            {form.formState.errors.charges && (
+              <p className="text-destructive text-xs">
+                {form.formState.errors.charges.message}
+              </p>
             )}
           </div>
+
+          {atpPreview !== null && (
+            <div className="bg-muted/40 flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+              <span className="text-muted-foreground">New average buy price (ATP)</span>
+              <span className="font-medium tabular-nums">{formatCurrency(atpPreview)}</span>
+            </div>
+          )}
 
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>

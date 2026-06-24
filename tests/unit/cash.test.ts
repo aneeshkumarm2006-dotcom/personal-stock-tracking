@@ -12,7 +12,7 @@ describe('computeNetInvested', () => {
     expect(computeNetInvested([])).toBe(0)
   })
 
-  it('BUY adds cost plus charges to net invested', () => {
+  it('BUY excludes charges from net invested (Angel One behaviour)', () => {
     const net = computeNetInvested([
       tx({
         type: 'BUY',
@@ -21,16 +21,24 @@ describe('computeNetInvested', () => {
         charges: { brokerage: 20, stt: 5 },
       }),
     ])
-    expect(net).toBe(1025)
+    // Only quantity * price leaves cash; the 25 of charges does not.
+    expect(net).toBe(1000)
   })
 
-  it('SELL returns proceeds net of charges (reduces net invested)', () => {
+  it('SELL inflow ignores charges too', () => {
     const net = computeNetInvested([
       tx({ type: 'BUY', quantity: 10, price: 100 }),
       tx({ type: 'SELL', quantity: 10, price: 120, charges: { brokerage: 30 } }),
     ])
-    // outflow 1000 - inflow (1200 - 30) = 1000 - 1170 = -170
-    expect(net).toBe(-170)
+    // outflow 1000 - inflow 1200 (charges not deducted) = -200
+    expect(net).toBe(-200)
+  })
+
+  it('the single `total` charge field is also excluded from cash', () => {
+    const net = computeNetInvested([
+      tx({ type: 'BUY', quantity: 10, price: 100, charges: { total: 50 } }),
+    ])
+    expect(net).toBe(1000)
   })
 
   it('handles a partial sell', () => {

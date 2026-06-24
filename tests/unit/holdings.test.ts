@@ -58,6 +58,16 @@ describe('computeHoldings', () => {
     expect(h.totalInvested).toBe(0)
   })
 
+  it('single `total` charge folds into avgBuyPrice (ATP) and totalInvested', () => {
+    const result = computeHoldings([
+      tx({ type: 'BUY', quantity: 10, price: 100, date: '2024-01-01', charges: { total: 50 } }),
+    ])
+    const h = result[0]!
+    // 50 of charge spread over 10 shares lifts ATP by 5.
+    expect(h.avgBuyPrice).toBe(105)
+    expect(h.totalInvested).toBe(1050)
+  })
+
   it('BUY then partial SELL: remaining netQty and avgBuyPrice are correct', () => {
     const result = computeHoldings([
       tx({ type: 'BUY', quantity: 10, price: 100, date: '2024-01-01' }),

@@ -5,6 +5,10 @@ export type TransactionCharges = {
   gst?: number
   stampDuty?: number
   sebiFees?: number
+  // Single combined charge amount (new UI). Older transactions instead split the
+  // total across the six fields above; every consumer sums them all, so the two
+  // forms are interchangeable. A trade uses one form or the other, never both.
+  total?: number
 }
 
 export type TransactionForHoldings = {
@@ -39,7 +43,8 @@ function sumCharges(charges?: TransactionCharges | null): number {
     (charges.exchFees ?? 0) +
     (charges.gst ?? 0) +
     (charges.stampDuty ?? 0) +
-    (charges.sebiFees ?? 0)
+    (charges.sebiFees ?? 0) +
+    (charges.total ?? 0)
   )
 }
 

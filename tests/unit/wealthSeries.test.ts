@@ -124,6 +124,21 @@ describe('buildWealthSeries', () => {
     expect(series[1]).toMatchObject({ cash: 5200, investmentValue: 0 })
   })
 
+  it('a buy charge lifts ATP but is NOT deducted from the cash line', () => {
+    const series = buildWealthSeries(
+      baseInput({
+        fundsAdded: 5000,
+        transactions: [buy('T1', '2026-01-01', 10, 100, { total: 50 })],
+        tradingDates: ['2026-01-01'],
+        closesByToken: new Map([['T1', new Map([['2026-01-01', 100]])]]),
+        niftyCloses: new Map([['2026-01-01', 20000]]),
+      }),
+    )
+
+    // Cash drops by 10*100 = 1000 only; the 50 charge is not debited from cash.
+    expect(series[0]).toMatchObject({ cash: 4000 })
+  })
+
   it('grows the Nifty benchmark from the lump-sum principal at day one', () => {
     const series = buildWealthSeries(
       baseInput({

@@ -185,7 +185,7 @@ export function reconcileHoldings(
       quantity,
       price,
       date: options.syncDate,
-      charges: { brokerage: 0, stt: 0, exchFees: 0, gst: 0, stampDuty: 0, sebiFees: 0 },
+      charges: { brokerage: 0, stt: 0, exchFees: 0, gst: 0, stampDuty: 0, sebiFees: 0, total: 0 },
       notes: `${SYNC_NOTE_PREFIX} ${action} ${quantity} @ ${price} (price: ${priceSource})`,
     })
   }

@@ -8,6 +8,9 @@ const chargesSchema = new Schema(
     gst: { type: Number, default: 0 },
     stampDuty: { type: Number, default: 0 },
     sebiFees: { type: Number, default: 0 },
+    // Single combined charge amount written by the current UI. Legacy rows keep
+    // their per-component split; totalCharges sums every field so both work.
+    total: { type: Number, default: 0 },
   },
   { _id: false },
 )
@@ -42,6 +45,7 @@ transactionSchema.virtual('totalCharges').get(function (this: {
     gst?: number
     stampDuty?: number
     sebiFees?: number
+    total?: number
   }
 }) {
   const c = this.charges ?? {}
@@ -51,7 +55,8 @@ transactionSchema.virtual('totalCharges').get(function (this: {
     (c.exchFees ?? 0) +
     (c.gst ?? 0) +
     (c.stampDuty ?? 0) +
-    (c.sebiFees ?? 0)
+    (c.sebiFees ?? 0) +
+    (c.total ?? 0)
   )
 })
 
