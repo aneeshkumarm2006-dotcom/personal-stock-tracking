@@ -78,6 +78,18 @@ export function hasNegativeBalance(transactions: LedgerCheckTx[]): boolean {
   return false
 }
 
+// True when deleting `removed` would *introduce* an oversell (sold qty > bought
+// qty) that the surviving `remaining` transactions alone exhibit. Mirrors the
+// create/edit guards: a delete is only blocked when it newly breaks the ledger.
+// A ledger that was already inconsistent isn't the delete's fault, so removing a
+// transaction from it (which can only reduce the oversell) is allowed.
+export function deleteIntroducesOversell(
+  remaining: LedgerCheckTx[],
+  removed: LedgerCheckTx,
+): boolean {
+  return !hasNegativeBalance([...remaining, removed]) && hasNegativeBalance(remaining)
+}
+
 export function computeHoldings(transactions: TransactionForHoldings[]): HoldingData[] {
   const byToken = new Map<string, TransactionForHoldings[]>()
   for (const tx of transactions) {

@@ -156,3 +156,32 @@
     animation: none;
   }
 }
+
+/*
+  Thin, arrow-free scrollbar. Used for the horizontal scroll under wide
+  tables (e.g. strategy group entries) so the bar stays unobtrusive.
+*/
+.thin-scrollbar {
+  scrollbar-width: thin; /* Firefox: thinnest track, no stepper arrows */
+  scrollbar-color: var(--border) transparent;
+}
+.thin-scrollbar::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted-foreground);
+}
+/* Remove the stepper arrow buttons at each end of the bar. */
+.thin-scrollbar::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}

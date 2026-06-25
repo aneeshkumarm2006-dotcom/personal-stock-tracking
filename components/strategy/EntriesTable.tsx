@@ -171,7 +171,7 @@ export function EntriesTable({
   return (
     <div className="space-y-2">
       <div className="overflow-hidden rounded-lg border">
-        <Table>
+        <Table containerClassName="thin-scrollbar">
           <TableHeader>
             <TableRow>
               <TableHead>Symbol</TableHead>

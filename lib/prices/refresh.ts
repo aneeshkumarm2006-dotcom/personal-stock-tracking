@@ -180,17 +180,27 @@ export async function runRefreshCycle(
   const startedAt = Date.now()
   await connectDB()
 
-  const [holdingTokens, strategyTokens, watchlistTokens, holdingAlertTokens] =
+  const [heldTokens, strategyTokens, watchlistTokens, armedHoldingAlertTokens] =
     await Promise.all([
-      includeHoldings
-        ? collectOpenHoldingTokens()
-        : Promise.resolve(new Set<string>()),
+      // Always resolved (even when holdings aren't being priced this cycle):
+      // held tokens gate which holding alerts may fire, see below.
+      collectOpenHoldingTokens(),
       collectStrategyTokens(),
       collectWatchlistTokens(),
       collectHoldingAlertTokens(),
     ])
+
+  // A holding alert only makes sense while the position is actually held. Once a
+  // stock is fully exited (its last transaction sold or deleted) its alert doc is
+  // an orphan that would otherwise keep being priced and keep emailing. Restrict
+  // alert tokens to currently-held ones; they reactivate automatically if the
+  // stock is bought again.
+  const holdingAlertTokens = new Set(
+    [...armedHoldingAlertTokens].filter((t) => heldTokens.has(t)),
+  )
+
   const union = new Set<string>([
-    ...holdingTokens,
+    ...(includeHoldings ? heldTokens : []),
     ...strategyTokens,
     ...watchlistTokens,
     ...holdingAlertTokens,
@@ -268,7 +278,11 @@ export async function runRefreshCycle(
     // holds even if the email fails. Each send is guarded so one failure
     // doesn't block the others or abort the cycle.
     const watchItems = await fetchAlertableWatchlistItems()
-    const holdingAlertDocs = await fetchAlertableHoldingAlerts()
+    // Same held-token gate as the pricing union above: never evaluate (and so
+    // never email) an alert whose stock is no longer held.
+    const holdingAlertDocs = (await fetchAlertableHoldingAlerts()).filter((d) =>
+      heldTokens.has(d.instrumentToken),
+    )
     const triggered = [
       ...(await evaluateWatchlistAlerts(watchItems, snapshots)),
       // Portfolio holding alerts ride the same snapshot batch; tagged 'portfolio'

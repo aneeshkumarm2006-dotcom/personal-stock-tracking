@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   computeHoldings,
+  deleteIntroducesOversell,
   hasNegativeBalance,
   type LedgerCheckTx,
   type TransactionForHoldings,
@@ -149,5 +150,44 @@ describe('hasNegativeBalance', () => {
 
   it('returns false for an empty ledger', () => {
     expect(hasNegativeBalance([])).toBe(false)
+  })
+})
+
+describe('deleteIntroducesOversell', () => {
+  const ledgerTx = (
+    type: 'BUY' | 'SELL',
+    quantity: number,
+    date: string,
+  ): LedgerCheckTx => ({ type, quantity, date })
+
+  it('blocks deleting a BUY that backs a later SELL (would strand the sell)', () => {
+    // Remaining after deletion is just the SELL, with no BUY to cover it.
+    const remaining = [ledgerTx('SELL', 10, '2024-02-01')]
+    const removed = ledgerTx('BUY', 10, '2024-01-01')
+    expect(deleteIntroducesOversell(remaining, removed)).toBe(true)
+  })
+
+  it('allows deleting a SELL (removing a sell can never oversell)', () => {
+    const remaining = [ledgerTx('BUY', 10, '2024-01-01')]
+    const removed = ledgerTx('SELL', 4, '2024-02-01')
+    expect(deleteIntroducesOversell(remaining, removed)).toBe(false)
+  })
+
+  it('allows deleting a redundant BUY when coverage still remains', () => {
+    // Two buys of 10, one sell of 5; removing one buy still leaves 10 bought.
+    const remaining = [
+      ledgerTx('BUY', 10, '2024-01-01'),
+      ledgerTx('SELL', 5, '2024-02-01'),
+    ]
+    const removed = ledgerTx('BUY', 10, '2024-01-15')
+    expect(deleteIntroducesOversell(remaining, removed)).toBe(false)
+  })
+
+  it('does not blame the delete for a pre-existing oversell', () => {
+    // Ledger was already oversold (two sells, no buy); deleting one sell only
+    // reduces the oversell, so it must not be blocked.
+    const remaining = [ledgerTx('SELL', 10, '2024-02-01')]
+    const removed = ledgerTx('SELL', 5, '2024-03-01')
+    expect(deleteIntroducesOversell(remaining, removed)).toBe(false)
   })
 })

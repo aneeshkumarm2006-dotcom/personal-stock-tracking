@@ -1,4 +1,5 @@
 import { HoldingTags } from '@/lib/db/models/HoldingTags'
+import { StrategyEntry } from '@/lib/db/models/StrategyEntry'
 import { WatchlistItem } from '@/lib/db/models/WatchlistItem'
 
 export const MAX_TAGS_PER_HOLDING = 20
@@ -41,16 +42,18 @@ export async function loadTagsForTokens(
 }
 
 // The distinct catalog of every tag in use, sorted case-insensitively.
-// Powers tag suggestions/autocomplete in the editor. Unions tags from BOTH
-// holdings and watchlist items so the two tabs share one vocabulary.
+// Powers tag suggestions/autocomplete in the editor. Unions tags from
+// holdings, watchlist items, AND strategy entries so every tag the user has
+// ever created shows up as a suggestion next time — no re-typing.
 export async function getAllTags(): Promise<string[]> {
-  const [holdingDocs, watchlistDocs] = await Promise.all([
+  const [holdingDocs, watchlistDocs, strategyDocs] = await Promise.all([
     HoldingTags.find({}, { tags: 1 }).lean(),
     WatchlistItem.find({}, { tags: 1 }).lean(),
+    StrategyEntry.find({}, { tags: 1 }).lean(),
   ])
   const seen = new Set<string>()
   const result: string[] = []
-  for (const d of [...holdingDocs, ...watchlistDocs]) {
+  for (const d of [...holdingDocs, ...watchlistDocs, ...strategyDocs]) {
     for (const tag of d.tags ?? []) {
       const key = tag.toLowerCase()
       if (seen.has(key)) continue

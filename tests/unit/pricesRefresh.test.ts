@@ -71,6 +71,7 @@ import { HoldingAlerts } from '@/lib/db/models/HoldingAlert'
 import { getQuotes } from '@/lib/angelone/quotes'
 import { getValidSession, invalidateSession } from '@/lib/angelone/session'
 import { evaluateEntries } from '@/lib/strategy/evaluate'
+import { evaluateWatchlistAlerts } from '@/lib/watchlist/evaluate'
 
 // ----- Helpers ------------------------------------------------------------
 
@@ -88,6 +89,7 @@ const invalidateSessionMock = invalidateSession as unknown as ReturnType<typeof 
 const getQuotesMock = getQuotes as unknown as ReturnType<typeof vi.fn>
 const getValidSessionMock = getValidSession as unknown as ReturnType<typeof vi.fn>
 const evaluateMock = evaluateEntries as unknown as ReturnType<typeof vi.fn>
+const evaluateAlertsMock = evaluateWatchlistAlerts as unknown as ReturnType<typeof vi.fn>
 
 function leanReturn<T>(docs: T[]) {
   return { lean: vi.fn().mockResolvedValue(docs) }
@@ -242,6 +244,42 @@ describe('runRefreshCycle', () => {
     expect(result).toMatchObject({ skipped: true, reason: 'error' })
     expect(bulkWriteMock).not.toHaveBeenCalled()
     expect(evaluateMock).not.toHaveBeenCalled()
+  })
+
+  it('does not price or evaluate a holding alert whose stock is no longer held (orphan)', async () => {
+    // HELD still has a position (netQty>0); SOLD was fully exited but its armed
+    // alert doc lingers. The orphan must not be priced or evaluated.
+    evaluateAlertsMock.mockResolvedValue([])
+    configureAggregate([{ _id: 'HELD', netQty: 5 }])
+    configureStrategyFind({ tokenRows: [], evaluatableDocs: [] })
+    configureInstrumentFind([{ token: 'HELD', exchange: 'NSE' }])
+
+    // Both tokens have an armed alert: the projected (.lean()) collector lists
+    // their tokens, and the hydrated fetch returns a doc per token.
+    holdingAlertFindMock.mockImplementation((_filter: unknown, projection?: unknown) =>
+      projection
+        ? leanReturn([{ instrumentToken: 'HELD' }, { instrumentToken: 'SOLD' }])
+        : Promise.resolve([
+            { instrumentToken: 'HELD', alerts: [], save: vi.fn() },
+            { instrumentToken: 'SOLD', alerts: [], save: vi.fn() },
+          ]),
+    )
+
+    const fetchedAt = new Date('2024-06-01T10:00:00Z')
+    getQuotesMock.mockResolvedValue([{ token: 'HELD', ltp: 100, fetchedAt }])
+
+    await runRefreshCycle()
+
+    // SOLD is excluded from the quote batch — only the held token is priced.
+    const [grouped] = getQuotesMock.mock.calls[0]! as [ExchangeTokens, string]
+    expect(grouped.NSE).toEqual(['HELD'])
+    expect(grouped.BSE ?? []).not.toContain('SOLD')
+
+    // The portfolio-alert evaluation (source 'portfolio') receives only HELD.
+    const portfolioCall = evaluateAlertsMock.mock.calls.find((c) => c[3] === 'portfolio')
+    expect(portfolioCall).toBeDefined()
+    const docs = portfolioCall![0] as Array<{ instrumentToken: string }>
+    expect(docs.map((d) => d.instrumentToken)).toEqual(['HELD'])
   })
 
   it('returns { skipped: true, reason: "no tokens" } when tokens exist but no matching Instrument documents resolve to an exchange', async () => {
