@@ -18,6 +18,13 @@ const percentFormatter = new Intl.NumberFormat('en-IN', {
 
 const intFormatter = new Intl.NumberFormat('en-IN')
 
+// Indian-style compact notation: 11.5L, 2.4Cr — for volumes and order quantities
+// that would otherwise be long strings of digits.
+const compactFormatter = new Intl.NumberFormat('en-IN', {
+  notation: 'compact',
+  maximumFractionDigits: 2,
+})
+
 const istDateTimeFormatter = new Intl.DateTimeFormat('en-IN', {
   timeZone: 'Asia/Kolkata',
   hour: '2-digit',
@@ -51,6 +58,11 @@ export function formatPercent(value: number | null | undefined): string {
 export function formatInt(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'
   return intFormatter.format(value)
+}
+
+export function formatCompact(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  return compactFormatter.format(value)
 }
 
 export function formatIstTime(value: Date | string | null | undefined): string {

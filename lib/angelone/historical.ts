@@ -3,7 +3,29 @@ import { formatInTimeZone } from 'date-fns-tz'
 import { getSmartApi, withRetry } from './client'
 import { NetworkError, classifyAngelError } from './errors'
 
-export type CandleInterval = 'ONE_DAY'
+// Angel One's getCandleData accepts these 8 interval enums. Each has a documented
+// "max days per request" cap (ONE_MINUTE=30 … ONE_DAY=2000) — callers must keep
+// their from/to window within it or the endpoint errors. See CANDLE_MAX_DAYS.
+export type CandleInterval =
+  | 'ONE_MINUTE'
+  | 'THREE_MINUTE'
+  | 'FIVE_MINUTE'
+  | 'TEN_MINUTE'
+  | 'FIFTEEN_MINUTE'
+  | 'THIRTY_MINUTE'
+  | 'ONE_HOUR'
+  | 'ONE_DAY'
+
+export const CANDLE_MAX_DAYS: Record<CandleInterval, number> = {
+  ONE_MINUTE: 30,
+  THREE_MINUTE: 60,
+  FIVE_MINUTE: 100,
+  TEN_MINUTE: 100,
+  FIFTEEN_MINUTE: 200,
+  THIRTY_MINUTE: 200,
+  ONE_HOUR: 400,
+  ONE_DAY: 2000,
+}
 
 export type CandleData = {
   timestamp: Date

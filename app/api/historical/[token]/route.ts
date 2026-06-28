@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { getCandles, type CandleData } from '@/lib/angelone/historical'
+import {
+  CANDLE_MAX_DAYS,
+  getCandles,
+  type CandleData,
+} from '@/lib/angelone/historical'
 import { getValidSession, invalidateSession } from '@/lib/angelone/session'
 import { AuthError, RateLimitError } from '@/lib/angelone/errors'
 
@@ -19,7 +23,16 @@ const dateLike = z.preprocess((v) => {
 
 const querySchema = z.object({
   exchange: z.enum(['NSE', 'BSE']),
-  interval: z.enum(['ONE_DAY']),
+  interval: z.enum([
+    'ONE_MINUTE',
+    'THREE_MINUTE',
+    'FIVE_MINUTE',
+    'TEN_MINUTE',
+    'FIFTEEN_MINUTE',
+    'THIRTY_MINUTE',
+    'ONE_HOUR',
+    'ONE_DAY',
+  ]),
   from: dateLike,
   to: dateLike,
 })
@@ -52,14 +65,15 @@ export async function GET(request: Request, { params }: RouteContext) {
     )
   }
 
+  // Angel One rejects windows wider than the interval's max-days cap. Clamp the
+  // start so an over-long request (e.g. 5y of 5-minute candles) returns the most
+  // recent allowed slice instead of erroring.
+  const maxDays = CANDLE_MAX_DAYS[parsed.data.interval]
+  const minFrom = new Date(parsed.data.to.getTime() - maxDays * 24 * 60 * 60 * 1000)
+  const from = parsed.data.from < minFrom ? minFrom : parsed.data.from
+
   const fetchCandles = () =>
-    getCandles(
-      token,
-      parsed.data.exchange,
-      parsed.data.interval,
-      parsed.data.from,
-      parsed.data.to,
-    )
+    getCandles(token, parsed.data.exchange, parsed.data.interval, from, parsed.data.to)
 
   let candles: CandleData[]
   try {

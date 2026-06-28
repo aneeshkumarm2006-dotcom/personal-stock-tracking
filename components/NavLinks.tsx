@@ -8,6 +8,7 @@ export const links = [
   { href: '/portfolio', label: 'Portfolio' },
   { href: '/watchlist', label: 'Watchlist' },
   { href: '/strategy', label: 'Strategy' },
+  { href: '/research', label: 'Research' },
 ] as const
 
 export function NavLinks() {

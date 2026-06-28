@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { PlusIcon, XIcon } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -17,22 +17,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-
-async function fetchTagCatalog(): Promise<string[]> {
-  const res = await fetch('/api/tags', { credentials: 'include' })
-  if (!res.ok) return []
-  const data = (await res.json()) as { tags?: string[] }
-  return data.tags ?? []
-}
-
-function addTag(list: string[], raw: string): string[] {
-  const tag = raw.trim().replace(/\s+/g, ' ')
-  if (!tag) return list
-  if (list.some((t) => t.toLowerCase() === tag.toLowerCase())) return list
-  return [...list, tag]
-}
+import { InlineTagsInput } from '@/components/strategy/InlineTagsInput'
 
 export type TagsEditorProps = {
   /** The identifier used in the endpoint URL (e.g. instrumentToken). */
@@ -65,45 +51,13 @@ export function TagsEditor({
 }: TagsEditorProps) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
-  const [draft, setDraft] = useState('')
   const [selected, setSelected] = useState<string[]>(tags)
   const [saving, setSaving] = useState(false)
 
   // Reset the working copy each time the dialog opens so cancels are discarded.
   const handleOpenChange = (next: boolean) => {
-    if (next) {
-      setSelected(tags)
-      setDraft('')
-    }
+    if (next) setSelected(tags)
     setOpen(next)
-  }
-
-  const catalog = useQuery({
-    queryKey: ['tags'],
-    queryFn: fetchTagCatalog,
-    enabled: open,
-  })
-
-  const suggestions = (catalog.data ?? []).filter(
-    (t) => !selected.some((s) => s.toLowerCase() === t.toLowerCase()),
-  )
-
-  const commitDraft = () => {
-    setSelected((prev) => addTag(prev, draft))
-    setDraft('')
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault()
-      commitDraft()
-    } else if (e.key === 'Backspace' && draft === '' && selected.length > 0) {
-      setSelected((prev) => prev.slice(0, -1))
-    }
-  }
-
-  const removeTag = (tag: string) => {
-    setSelected((prev) => prev.filter((t) => t !== tag))
   }
 
   const save = async () => {
@@ -162,58 +116,9 @@ export function TagsEditor({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="tag-input">Tags</Label>
-              <div className="flex flex-wrap items-center gap-1.5 rounded-md border p-2">
-                {selected.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="gap-1">
-                    {tag}
-                    <button
-                      type="button"
-                      aria-label={`Remove ${tag}`}
-                      className="hover:text-destructive"
-                      onClick={() => removeTag(tag)}
-                    >
-                      <XIcon className="size-3" aria-hidden="true" />
-                    </button>
-                  </Badge>
-                ))}
-                <Input
-                  id="tag-input"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onBlur={commitDraft}
-                  placeholder={selected.length === 0 ? 'Add a tag…' : ''}
-                  className="h-6 flex-1 border-0 px-1 shadow-none focus-visible:ring-0"
-                />
-              </div>
-            </div>
-
-            {suggestions.length > 0 && (
-              <div className="space-y-1.5">
-                <Label className="text-muted-foreground text-xs">Existing tags</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {suggestions.map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="outline"
-                      className="cursor-pointer"
-                      render={
-                        <button
-                          type="button"
-                          onClick={() => setSelected((prev) => addTag(prev, tag))}
-                        />
-                      }
-                    >
-                      <PlusIcon className="size-3" aria-hidden="true" />
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
+          <div className="space-y-1.5">
+            <Label htmlFor="tag-input">Tags</Label>
+            <InlineTagsInput id="tag-input" value={selected} onChange={setSelected} />
           </div>
 
           <DialogFooter>
