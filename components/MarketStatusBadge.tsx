@@ -96,9 +96,14 @@ function MarketTrendChart({ up }: { up: boolean }) {
 
 // Tiny analog clock whose hands track the real IST time, ticking each second.
 function IstAnalogClock() {
-  const [now, setNow] = useState(getIstTime)
+  // Start from a fixed time so the server and the client's first render agree
+  // (reading the live clock during render would mismatch by however many
+  // seconds elapse between the two and trip a hydration warning). The real
+  // time is set right after mount.
+  const [now, setNow] = useState({ hours: 0, minutes: 0, seconds: 0 })
 
   useEffect(() => {
+    setNow(getIstTime())
     const id = setInterval(() => setNow(getIstTime()), 1000)
     return () => clearInterval(id)
   }, [])

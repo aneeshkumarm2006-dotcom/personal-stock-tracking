@@ -32,6 +32,16 @@ function recColor(name: string): string {
   }
 }
 
+// Full-strength version for text (the consensus word), where the 55%-transparent
+// moderate buckets would be too faint to read. Green for any buy, red for any
+// sell, neutral grey otherwise.
+function consensusColor(name: string): string {
+  const n = name.trim().toLowerCase()
+  if (n.includes('buy') || n === 'outperform') return 'var(--gain)'
+  if (n.includes('sell') || n === 'underperform') return 'var(--loss)'
+  return 'var(--muted-foreground)'
+}
+
 export function AnalystViewCard({ data }: { data: Fundamentals }) {
   const { recommendations, averageRating, totalAnalysts, meanValue, riskCategory, riskStdDev } =
     data.analyst
@@ -46,7 +56,9 @@ export function AnalystViewCard({ data }: { data: Fundamentals }) {
         {averageRating && (
           <div className="flex items-baseline justify-between gap-3">
             <span className="text-muted-foreground text-xs">Consensus</span>
-            <span className="text-base font-semibold">{averageRating}</span>
+            <span className="text-base font-semibold" style={{ color: consensusColor(averageRating) }}>
+              {averageRating}
+            </span>
           </div>
         )}
 

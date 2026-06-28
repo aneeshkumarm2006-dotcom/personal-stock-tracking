@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils'
 import type { Signal } from '@/lib/research/technicalRating'
 
 // A TradingView-style speedometer gauge: a thin semicircular track that fills
-// with a red→purple→blue gradient up to the needle (the buy side is blue, not
-// green, to match TradingView), greys out beyond it, labels the five zones
+// with a red→neutral→green gradient up to the needle (sell uses --loss, buy
+// uses the site's --gain green), greys out beyond it, labels the five zones
 // around the rim, and prints the signal word beneath. Pure SVG — no chart lib —
 // so it scales cleanly and stays a single accessible <figure>.
 
@@ -23,13 +23,13 @@ export type RatingGaugeProps = {
 const CX = 150
 const CY = 132
 const R = 82
-const STROKE = 13
+const STROKE = 8
 const NEEDLE_LEN = R - 16
 
-// TradingView palette: red for sell, blue for buy, grey track for the unfilled
+// Red for sell, the site's green (--gain) for buy, grey track for the unfilled
 // remainder.
-const SELL = '#f23645'
-const BUY = '#2962ff'
+const SELL = 'var(--loss)'
+const BUY = 'var(--gain)'
 const TRACK = 'var(--border)'
 
 // score ∈ [-1,1] → angle in degrees, 0° = right (Strong Buy), 180° = left
@@ -98,7 +98,7 @@ export function RatingGauge({
         <defs>
           {/* Horizontal gradient across the arc's bounding box; because the
               arc's x-position tracks its angle, this reads red (sell) on the
-              left through purple to blue (buy) on the right. */}
+              left through white to green (buy) on the right. */}
           <linearGradient
             id={gradientId}
             gradientUnits="userSpaceOnUse"
@@ -107,10 +107,10 @@ export function RatingGauge({
             x2={CX + R}
             y2={CY}
           >
-            <stop offset="0%" stopColor="#ffc2c7" />
-            <stop offset="18%" stopColor={SELL} />
-            <stop offset="50%" stopColor="#9450c9" />
-            <stop offset="82%" stopColor="#3f6ef2" />
+            <stop offset="0%" stopColor={SELL} />
+            <stop offset="25%" stopColor={SELL} />
+            <stop offset="50%" stopColor="white" />
+            <stop offset="75%" stopColor={BUY} />
             <stop offset="100%" stopColor={BUY} />
           </linearGradient>
         </defs>
@@ -121,7 +121,7 @@ export function RatingGauge({
           fill="none"
           stroke={TRACK}
           strokeWidth={STROKE}
-          strokeLinecap="round"
+          strokeLinecap="butt"
         />
 
         {/* Coloured fill from Strong Sell up to the needle. */}
@@ -131,7 +131,7 @@ export function RatingGauge({
             fill="none"
             stroke={`url(#${gradientId})`}
             strokeWidth={STROKE}
-            strokeLinecap="round"
+            strokeLinecap="butt"
           />
         )}
 
