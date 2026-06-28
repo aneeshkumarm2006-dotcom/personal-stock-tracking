@@ -1,12 +1,14 @@
 'use client'
 
+import { useId } from 'react'
 import { cn } from '@/lib/utils'
 import type { Signal } from '@/lib/research/technicalRating'
 
-// A TradingView-style semicircular gauge: a 5-zone arc (Strong Sell → Strong
-// Buy) with a needle at the rating score, the signal word in the centre, and
-// Sell / Neutral / Buy tallies beneath. Pure SVG — no chart lib — so it scales
-// cleanly and stays a single accessible <figure>.
+// A TradingView-style speedometer gauge: a thin semicircular track that fills
+// with a red→purple→blue gradient up to the needle (the buy side is blue, not
+// green, to match TradingView), greys out beyond it, labels the five zones
+// around the rim, and prints the signal word beneath. Pure SVG — no chart lib —
+// so it scales cleanly and stays a single accessible <figure>.
 
 export type RatingGaugeProps = {
   title: string
@@ -18,10 +20,17 @@ export type RatingGaugeProps = {
   emphasis?: boolean
 }
 
-const CX = 100
-const CY = 104
+const CX = 150
+const CY = 132
 const R = 82
-const STROKE = 18
+const STROKE = 13
+const NEEDLE_LEN = R - 16
+
+// TradingView palette: red for sell, blue for buy, grey track for the unfilled
+// remainder.
+const SELL = '#f23645'
+const BUY = '#2962ff'
+const TRACK = 'var(--border)'
 
 // score ∈ [-1,1] → angle in degrees, 0° = right (Strong Buy), 180° = left
 // (Strong Sell), 90° = straight up (Neutral).
@@ -37,29 +46,27 @@ function polar(angleDeg: number, radius: number): [number, number] {
 function arcPath(aStart: number, aEnd: number): string {
   const [x0, y0] = polar(aStart, R)
   const [x1, y1] = polar(aEnd, R)
-  // aStart > aEnd (we sweep left→right, i.e. decreasing angle = clockwise in
-  // screen space because the y-axis is flipped).
-  const sweep = 1
+  // We sweep from the larger angle to the smaller one (left → right), which is
+  // clockwise in screen space because the y-axis is flipped.
   const largeArc = Math.abs(aStart - aEnd) > 180 ? 1 : 0
-  return `M ${x0} ${y0} A ${R} ${R} 0 ${largeArc} ${sweep} ${x1} ${y1}`
+  return `M ${x0} ${y0} A ${R} ${R} 0 ${largeArc} 1 ${x1} ${y1}`
 }
-
-// The 5 zones in angle space, from left (sell) to right (buy). A small gap keeps
-// the segments visually distinct.
-const GAP = 1.5
-const ZONES: Array<{ from: number; to: number; color: string }> = [
-  { from: 180, to: 135, color: 'var(--loss)' }, // Strong Sell
-  { from: 135, to: 99, color: 'color-mix(in oklch, var(--loss) 55%, transparent)' }, // Sell
-  { from: 99, to: 81, color: 'color-mix(in oklch, var(--muted-foreground) 45%, transparent)' }, // Neutral
-  { from: 81, to: 45, color: 'color-mix(in oklch, var(--gain) 55%, transparent)' }, // Buy
-  { from: 45, to: 0, color: 'var(--gain)' }, // Strong Buy
-]
 
 function signalColor(signal: Signal | null): string {
-  if (signal === 'Strong Buy' || signal === 'Buy') return 'var(--gain)'
-  if (signal === 'Strong Sell' || signal === 'Sell') return 'var(--loss)'
+  if (signal === 'Strong Buy' || signal === 'Buy') return BUY
+  if (signal === 'Strong Sell' || signal === 'Sell') return SELL
   return 'var(--muted-foreground)'
 }
+
+// The five rim labels, ordered left (sell) → right (buy). `key` matches the
+// lower-cased, de-spaced signal so we can highlight the active one.
+const LABELS: Array<{ key: string; text: string; x: number; y: number }> = [
+  { key: 'strongsell', text: 'Strong sell', x: 40, y: 152 },
+  { key: 'sell', text: 'Sell', x: 70, y: 74 },
+  { key: 'neutral', text: 'Neutral', x: 150, y: 40 },
+  { key: 'buy', text: 'Buy', x: 230, y: 74 },
+  { key: 'strongbuy', text: 'Strong buy', x: 260, y: 152 },
+]
 
 export function RatingGauge({
   title,
@@ -70,34 +77,84 @@ export function RatingGauge({
   sell,
   emphasis = false,
 }: RatingGaugeProps) {
+  const gradientId = useId()
   const hasData = score !== null && signal !== null
   const angle = hasData ? scoreToAngle(score) : 90
-  const [nx, ny] = polar(angle, R - 6)
+  const [nx, ny] = polar(angle, NEEDLE_LEN)
   const color = signalColor(signal)
+  const activeKey = hasData ? signal!.toLowerCase().replace(/\s+/g, '') : null
 
   const ariaLabel = hasData
     ? `${title}: ${signal}. ${buy} buy, ${neutral} neutral, ${sell} sell signals.`
     : `${title}: not enough data.`
 
   return (
-    <figure
-      role="img"
-      aria-label={ariaLabel}
-      className="flex flex-col items-center gap-1"
-    >
-      <figcaption className="text-muted-foreground text-xs font-medium">{title}</figcaption>
-      <svg viewBox="0 0 200 128" className={cn('w-full', emphasis ? 'max-w-[240px]' : 'max-w-[200px]')}>
-        {ZONES.map((z, i) => (
-          <path
-            key={i}
-            d={arcPath(z.from - (i === 0 ? 0 : GAP), z.to + (i === ZONES.length - 1 ? 0 : GAP))}
-            fill="none"
-            stroke={z.color}
-            strokeWidth={STROKE}
-            strokeLinecap="butt"
-          />
-        ))}
+    <figure role="img" aria-label={ariaLabel} className="flex flex-col items-center gap-1">
+      <figcaption className="text-foreground text-sm font-semibold">{title}</figcaption>
+      <svg
+        viewBox="0 0 300 180"
+        className={cn('w-full', emphasis ? 'max-w-[280px]' : 'max-w-[240px]')}
+      >
+        <defs>
+          {/* Horizontal gradient across the arc's bounding box; because the
+              arc's x-position tracks its angle, this reads red (sell) on the
+              left through purple to blue (buy) on the right. */}
+          <linearGradient
+            id={gradientId}
+            gradientUnits="userSpaceOnUse"
+            x1={CX - R}
+            y1={CY}
+            x2={CX + R}
+            y2={CY}
+          >
+            <stop offset="0%" stopColor="#ffc2c7" />
+            <stop offset="18%" stopColor={SELL} />
+            <stop offset="50%" stopColor="#9450c9" />
+            <stop offset="82%" stopColor="#3f6ef2" />
+            <stop offset="100%" stopColor={BUY} />
+          </linearGradient>
+        </defs>
 
+        {/* Grey remainder beyond the needle (or the whole track when no data). */}
+        <path
+          d={arcPath(hasData ? angle : 180, 0)}
+          fill="none"
+          stroke={TRACK}
+          strokeWidth={STROKE}
+          strokeLinecap="round"
+        />
+
+        {/* Coloured fill from Strong Sell up to the needle. */}
+        {hasData && (
+          <path
+            d={arcPath(180, angle)}
+            fill="none"
+            stroke={`url(#${gradientId})`}
+            strokeWidth={STROKE}
+            strokeLinecap="round"
+          />
+        )}
+
+        {/* Rim labels. */}
+        {LABELS.map((l) => {
+          const active = l.key === activeKey
+          return (
+            <text
+              key={l.key}
+              x={l.x}
+              y={l.y}
+              textAnchor="middle"
+              fontSize={11}
+              fontWeight={active ? 600 : 500}
+              fill={active ? color : 'color-mix(in oklch, var(--muted-foreground) 60%, transparent)'}
+              style={{ fontFamily: 'inherit' }}
+            >
+              {l.text}
+            </text>
+          )
+        })}
+
+        {/* Needle. */}
         {hasData && (
           <>
             <line
@@ -105,19 +162,21 @@ export function RatingGauge({
               y1={CY}
               x2={nx}
               y2={ny}
-              stroke={color}
-              strokeWidth={3}
+              stroke="var(--foreground)"
+              strokeWidth={2.5}
               strokeLinecap="round"
             />
-            <circle cx={CX} cy={CY} r={6} fill={color} />
+            <circle cx={CX} cy={CY} r={5} fill="var(--foreground)" />
           </>
         )}
 
+        {/* Signal word. */}
         <text
           x={CX}
-          y={emphasis ? 84 : 86}
+          y={170}
           textAnchor="middle"
-          className={cn('font-semibold', emphasis ? 'text-[15px]' : 'text-[13px]')}
+          fontSize={emphasis ? 22 : 19}
+          fontWeight={700}
           fill={color}
           style={{ fontFamily: 'inherit' }}
         >
@@ -125,16 +184,19 @@ export function RatingGauge({
         </text>
       </svg>
 
-      <div className="text-muted-foreground flex items-center gap-3 text-xs tabular-nums">
-        <span>
-          <span className="text-loss font-semibold">{sell}</span> Sell
-        </span>
-        <span>
-          <span className="text-foreground font-semibold">{neutral}</span> Neutral
-        </span>
-        <span>
-          <span className="text-gain font-semibold">{buy}</span> Buy
-        </span>
+      <div className="flex items-start gap-6 text-center">
+        <div>
+          <div className="text-foreground text-xs font-semibold">Sell</div>
+          <div className="text-foreground text-sm font-semibold tabular-nums">{sell}</div>
+        </div>
+        <div>
+          <div className="text-foreground text-xs font-semibold">Neutral</div>
+          <div className="text-foreground text-sm font-semibold tabular-nums">{neutral}</div>
+        </div>
+        <div>
+          <div className="text-foreground text-xs font-semibold">Buy</div>
+          <div className="text-foreground text-sm font-semibold tabular-nums">{buy}</div>
+        </div>
       </div>
     </figure>
   )
