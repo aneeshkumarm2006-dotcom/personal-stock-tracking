@@ -20,6 +20,7 @@ import { QuoteHeader } from './QuoteHeader'
 import { QuoteStats } from './QuoteStats'
 import { ResearchPriceChart } from './ResearchPriceChart'
 import { ResearchSearch } from './ResearchSearch'
+import { TechnicalRatingCard } from './TechnicalRatingCard'
 import { TechnicalsCard } from './TechnicalsCard'
 import type { CandleRow, Quote, SelectedInstrument } from './types'
 
@@ -195,6 +196,12 @@ export function ResearchView({ initial }: ResearchViewProps) {
         analytics={analytics}
         quote={quote}
         isLoading={dailyQuery.isLoading}
+      />
+
+      <TechnicalRatingCard
+        candles={dailyQuery.data ?? []}
+        isLoading={dailyQuery.isLoading}
+        isError={dailyQuery.isError}
       />
 
       <FundamentalsSection symbol={selected.symbol} name={selected.name} />
