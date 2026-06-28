@@ -104,7 +104,7 @@ export function TechnicalsCard({ analytics, quote, isLoading }: TechnicalsCardPr
       <CardHeader>
         <CardTitle>Performance &amp; technicals</CardTitle>
         <CardDescription>
-          Computed from daily price history — the API provides no fundamentals.
+          Computed from daily price history.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">

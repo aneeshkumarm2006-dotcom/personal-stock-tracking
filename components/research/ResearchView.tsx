@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/card'
 import { computeAnalytics } from '@/lib/research/analytics'
 import { isMarketOpen } from '@/lib/time/marketHours'
+import { FundamentalsSection } from './fundamentals/FundamentalsSection'
 import { MarketDepthCard } from './MarketDepthCard'
 import { QuoteHeader } from './QuoteHeader'
 import { QuoteStats } from './QuoteStats'
@@ -124,7 +125,8 @@ export function ResearchView({ initial }: ResearchViewProps) {
         <div className="space-y-2 text-center">
           <h1 className="font-heading text-2xl font-semibold tracking-tight">Research</h1>
           <p className="text-muted-foreground text-sm">
-            Search any NSE/BSE stock to see its live price, market depth, and history.
+            Search any NSE/BSE stock to see its live price, market depth, history,
+            and company fundamentals.
           </p>
         </div>
         <div className="mt-6">
@@ -139,8 +141,9 @@ export function ResearchView({ initial }: ResearchViewProps) {
             <CardDescription>
               Live LTP, OHLC, 52-week range, circuit limits, volume, and the best-5
               market-depth ladder — plus computed returns, moving averages,
-              volatility and drawdown from daily history. Fundamentals (P/E, market
-              cap, financials) aren&apos;t available from the Angel One trading API.
+              volatility and drawdown from daily history, and full company
+              fundamentals: P/E and valuation ratios, financial statements,
+              shareholding, peers, analyst ratings and news.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -193,6 +196,8 @@ export function ResearchView({ initial }: ResearchViewProps) {
         quote={quote}
         isLoading={dailyQuery.isLoading}
       />
+
+      <FundamentalsSection symbol={selected.symbol} name={selected.name} />
     </div>
   )
 }
