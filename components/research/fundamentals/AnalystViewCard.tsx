@@ -10,6 +10,28 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { fmtNum } from './format'
 import type { Fundamentals } from './types'
 
+// Map an analyst rating to the same semantic ramp the technical-rating gauge
+// uses, so colour stays on-theme (muted --gain / --loss / --muted-foreground)
+// instead of the bright stoplight hexes the provider ships. Strong = full
+// token, the moderate buckets a 55% mix, hold the neutral grey. Falls back to
+// the neutral grey for any unrecognised label.
+function recColor(name: string): string {
+  switch (name.trim().toLowerCase()) {
+    case 'strong buy':
+      return 'var(--gain)'
+    case 'buy':
+    case 'outperform':
+      return 'color-mix(in oklch, var(--gain) 55%, transparent)'
+    case 'sell':
+    case 'underperform':
+      return 'color-mix(in oklch, var(--loss) 55%, transparent)'
+    case 'strong sell':
+      return 'var(--loss)'
+    default: // Hold / Neutral / anything else
+      return 'color-mix(in oklch, var(--muted-foreground) 45%, transparent)'
+  }
+}
+
 export function AnalystViewCard({ data }: { data: Fundamentals }) {
   const { recommendations, averageRating, totalAnalysts, meanValue, riskCategory, riskStdDev } =
     data.analyst
@@ -36,7 +58,7 @@ export function AnalystViewCard({ data }: { data: Fundamentals }) {
                 r.count > 0 ? (
                   <div
                     key={r.name}
-                    style={{ width: `${(r.count / total) * 100}%`, backgroundColor: r.color }}
+                    style={{ width: `${(r.count / total) * 100}%`, backgroundColor: recColor(r.name) }}
                     title={`${r.name}: ${r.count}`}
                   />
                 ) : null,
@@ -48,7 +70,7 @@ export function AnalystViewCard({ data }: { data: Fundamentals }) {
                   <span className="flex items-center gap-2">
                     <span
                       className="inline-block size-2.5 rounded-full"
-                      style={{ backgroundColor: r.color }}
+                      style={{ backgroundColor: recColor(r.name) }}
                       aria-hidden="true"
                     />
                     <span className="text-muted-foreground">{r.name}</span>

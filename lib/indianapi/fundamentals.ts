@@ -269,7 +269,6 @@ function transform(raw: RawStock, query: string): Fundamentals {
     .map((r) => ({
       name: str(r.ratingName) ?? '',
       count: Math.round(toNum(r.numberOfAnalystsLatest) ?? 0),
-      color: str(r.colorCode) ?? '#9ca3af',
     }))
 
   const movingAverages = (raw.stockTechnicalData ?? [])

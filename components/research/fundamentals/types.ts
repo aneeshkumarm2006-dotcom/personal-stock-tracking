@@ -59,7 +59,7 @@ export type Peer = {
   rating: string | null
 }
 
-export type AnalystRecommendation = { name: string; count: number; color: string }
+export type AnalystRecommendation = { name: string; count: number }
 
 export type AnalystSummary = {
   recommendations: AnalystRecommendation[]
