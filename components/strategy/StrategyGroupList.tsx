@@ -26,8 +26,19 @@ import {
 } from '@/components/ui/table'
 import { formatCurrency, formatInt, formatIstDateTime } from '@/lib/format'
 import type { EntryStats, GroupStats } from '@/lib/strategy/group'
+import type { StrategyEntryStatus } from '@/lib/strategy/evaluate'
 import { GroupCard } from './GroupCard'
+import { statusDisplay } from './EntriesTable'
 import { StrategyLivePrices } from './StrategyLivePrices'
+
+// Stocks that are live or still waiting to fill — the open positions worth
+// spotting across groups. Settled entries (TP/SL/closed/expired) are excluded.
+const OPEN_STATUSES = new Set<StrategyEntryStatus>([
+  'pending',
+  'active',
+  'partial',
+  'trailing',
+])
 
 type GroupDoc = {
   _id: string
@@ -96,7 +107,7 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
       if (!entries) return
       const groupName = groups[i]?.name ?? 'Unknown group'
       for (const entry of entries) {
-        if (entry.status !== 'pending') continue
+        if (!OPEN_STATUSES.has(entry.status)) continue
         // Unassigned entries have no stock to match across groups — skip them so
         // they don't all cluster under an empty symbol.
         if (!entry.instrumentToken && !entry.instrumentSymbol) continue
@@ -201,7 +212,7 @@ function CommonStocksPanel({
     return (
       <EmptyState
         className="min-h-24 py-6"
-        description="No waiting stocks are shared across multiple groups yet."
+        description="No open stocks are shared across multiple groups yet."
       />
     )
   }
@@ -211,7 +222,7 @@ function CommonStocksPanel({
       <CardHeader>
         <CardTitle>Common stocks</CardTitle>
         <CardDescription>
-          Stocks still waiting to fill (pending) in two or more groups.
+          Stocks that are live or still waiting to fill in two or more groups.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -228,7 +239,7 @@ function CommonStocksPanel({
                 <TableHead className="text-right">TP1</TableHead>
                 <TableHead className="text-right">TP2</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
-                <TableHead>Waiting for</TableHead>
+                <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -236,6 +247,7 @@ function CommonStocksPanel({
                 stock.occurrences.map((o, idx) => {
                   const e = o.entry
                   const key = `${stock.symbol}-${o.groupName}-${e.id ?? idx}`
+                  const status = statusDisplay(e)
                   return (
                     <TableRow key={key}>
                       <TableCell className="font-medium">
@@ -269,10 +281,8 @@ function CommonStocksPanel({
                         {formatInt(e.quantity)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">
-                          {e.triggerType === 'stop'
-                            ? 'Breakout ↑'
-                            : 'Dip ↓'}
+                        <Badge variant={status.variant} className={status.className}>
+                          {status.label}
                         </Badge>
                       </TableCell>
                     </TableRow>

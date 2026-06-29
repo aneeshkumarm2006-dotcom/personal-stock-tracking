@@ -38,7 +38,7 @@ export type EntriesTableProps = {
   capitalFree?: number
 }
 
-type StatusDisplay = {
+export type StatusDisplay = {
   label: string
   variant: 'default' | 'secondary' | 'destructive' | 'outline'
   className?: string
@@ -53,7 +53,7 @@ function runningPct(entry: EntryStats): { label: string; className: string } {
   }
 }
 
-function statusDisplay(entry: EntryStats): StatusDisplay {
+export function statusDisplay(entry: EntryStats): StatusDisplay {
   switch (entry.status) {
     case 'pending':
       return {
