@@ -67,6 +67,12 @@ export type GroupStats = {
   capitalFree: number
   entryCountByStatus: Record<StrategyEntryStatus, number>
   winRate: number
+  // Booked P&L from closed/scaled-out positions.
+  realizedPnL: number
+  // Mark-to-market P&L on the quantity still running.
+  unrealizedPnL: number
+  // realizedPnL + unrealizedPnL.
+  totalPnL: number
   entries: EntryStats[]
 }
 
@@ -113,6 +119,8 @@ export function computeGroupStats(
 
   const entryCountByStatus = emptyCounts()
   let capitalDeployed = 0
+  let realizedTotal = 0
+  let unrealizedTotal = 0
   const enriched: EntryStats[] = []
 
   for (const e of entries) {
@@ -137,6 +145,9 @@ export function computeGroupStats(
       RUNNING_STATUSES.has(e.status) && currentPrice !== null
         ? round2((currentPrice - e.entryPrice) * remainingQuantity)
         : 0
+
+    realizedTotal += realized
+    unrealizedTotal += unrealized
 
     enriched.push({
       id: e._id != null ? String(e._id) : null,
@@ -176,6 +187,9 @@ export function computeGroupStats(
     capitalFree: round2(group.allocatedCapital - capitalDeployed),
     entryCountByStatus,
     winRate,
+    realizedPnL: round2(realizedTotal),
+    unrealizedPnL: round2(unrealizedTotal),
+    totalPnL: round2(realizedTotal + unrealizedTotal),
     entries: enriched,
   }
 }

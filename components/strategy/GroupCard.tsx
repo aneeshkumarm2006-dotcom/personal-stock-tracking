@@ -23,7 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, pnlColorClass } from '@/lib/format'
 import type { GroupStats } from '@/lib/strategy/group'
 import { EntriesTable } from './EntriesTable'
 import { AddEntryDialog } from './AddEntryDialog'
@@ -201,6 +201,11 @@ export function GroupCard({ groupId, initialGroup }: GroupCardProps) {
               {`${winRatePct.toFixed(0)}%`}
             </dd>
           </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <PnlStat label="Realised P&L" value={stats.realizedPnL} />
+            <PnlStat label="Unrealised P&L" value={stats.unrealizedPnL} />
+            <PnlStat label="Total P&L" value={stats.totalPnL} />
+          </div>
           <div className="bg-border grid grid-cols-2 gap-px overflow-hidden rounded-lg border sm:grid-cols-4">
             <Stat label="Pending" value={counts.pending} />
             <Stat label="Active" value={counts.active} />
@@ -281,6 +286,19 @@ function Stat({
       <dt className="text-muted-foreground text-xs">{label}</dt>
       <dd className={`text-sm font-medium tabular-nums ${valueClass ?? ''}`}>
         {value}
+      </dd>
+    </div>
+  )
+}
+
+function PnlStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-card flex items-baseline justify-between rounded-lg border px-4 py-3">
+      <dt className="text-muted-foreground text-sm font-medium">{label}</dt>
+      <dd
+        className={`text-lg font-semibold tabular-nums leading-none ${pnlColorClass(value)}`}
+      >
+        {formatCurrency(value)}
       </dd>
     </div>
   )
