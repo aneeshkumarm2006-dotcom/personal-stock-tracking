@@ -77,6 +77,20 @@ export function clearCandleCache(): void {
   candleCache.clear()
 }
 
+// Whether a getCandles() call with these exact args would be served from cache
+// (no network hit). Lets callers that fan out over many tokens skip inter-call
+// throttling delays for the ones already cached. See getQuotes' candle fallback.
+export function isCandleFresh(
+  token: string,
+  exchange: string,
+  interval: CandleInterval,
+  fromDate: Date,
+  toDate: Date,
+): boolean {
+  const cached = candleCache.get(cacheKey(token, exchange, interval, fromDate, toDate))
+  return !!cached && cached.expiresAt > Date.now()
+}
+
 export async function getCandles(
   token: string,
   exchange: string,
