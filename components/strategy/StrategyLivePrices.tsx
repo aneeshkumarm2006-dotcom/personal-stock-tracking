@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { formatIstTime } from '@/lib/format'
+import { useRateLimitToast } from '@/lib/hooks/useRateLimitToast'
 import { isMarketOpen } from '@/lib/time/marketHours'
 import { cn } from '@/lib/utils'
 
@@ -59,6 +60,10 @@ export function StrategyLivePrices() {
     gcTime: 0,
     retry: false,
   })
+
+  // Raise a bottom-right toast while Angel One is throttling; only meaningful
+  // while the poller is actually running (market open).
+  useRateLimitToast(open && (query.data?.rateLimited ?? false))
 
   const lastUpdated =
     query.dataUpdatedAt > 0 ? formatIstTime(new Date(query.dataUpdatedAt)) : null
