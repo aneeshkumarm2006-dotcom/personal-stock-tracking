@@ -6,6 +6,7 @@ import { StrategyGroup } from '@/lib/db/models/StrategyGroup'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/PageHeader'
+import { ScrollToTopButton } from '@/components/ScrollToTopButton'
 import { CreateGroupDialog } from '@/components/strategy/CreateGroupDialog'
 import { StrategyGroupList } from '@/components/strategy/StrategyGroupList'
 
@@ -63,6 +64,8 @@ export default async function StrategyPage() {
       ) : (
         <StrategyGroupList groups={groups} />
       )}
+
+      <ScrollToTopButton />
     </div>
   )
 }
