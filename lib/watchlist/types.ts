@@ -1,16 +1,29 @@
 // Shared view types for the Watchlist tab — safe to import from both the API
 // routes (server) and the React components (client). No runtime/server deps.
 
+import type {
+  AlertConfig,
+  AlertDirection,
+  AlertStatus,
+  ConditionType,
+} from '@/lib/alerts/types'
+
 export type Conviction = 'watching' | 'interested' | 'high'
 export type Exchange = 'NSE' | 'BSE'
-export type AlertDirection = 'below' | 'above'
-export type AlertStatus = 'armed' | 'triggered' | 'snoozed' | 'disabled'
+// Re-exported from the canonical alert-types home so the many existing importers
+// of these from '@/lib/watchlist/types' keep working.
+export type { AlertConfig, AlertDirection, AlertStatus, ConditionType }
 
-// An embedded alert as returned by the API (ObjectIds/Dates serialized).
+// An embedded alert as returned by the API (ObjectIds/Dates serialized). `type`
+// discriminates the condition; `targetPrice`/`direction` are only guaranteed for
+// the legacy `price` type (hence optional), and `config` carries the parameters
+// for every other type.
 export type WatchlistAlertView = {
   _id: string
-  targetPrice: number
+  type: ConditionType
+  targetPrice: number | null
   direction: AlertDirection
+  config: AlertConfig
   status: AlertStatus
   lastTriggeredAt: string | null
   lastTriggeredPrice: number | null

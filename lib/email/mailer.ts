@@ -1,6 +1,7 @@
 import nodemailer, { type Transporter } from 'nodemailer'
 
 import { formatCurrency, formatIstTime, formatPercent } from '@/lib/format'
+import { conditionLabel, describeCondition } from '@/lib/alerts/describe'
 import type { TriggeredAlert } from '@/lib/watchlist/evaluate'
 
 export type MailResult =
@@ -52,15 +53,14 @@ function buildAlertEmail(alert: TriggeredAlert): {
   html: string
 } {
   const symbol = escapeHtml(alert.instrumentSymbol)
-  const dirWord = alert.direction === 'below' ? '≤' : '≥'
-  const subject = `🔔 ${alert.instrumentSymbol} hit ${formatCurrency(
-    alert.ltp,
-  )} (${dirWord} your ${formatCurrency(alert.targetPrice)} alert)`
+  // Phrasing comes from the shared describeCondition, so any condition type
+  // (volume, SMA cross, RSI, …) — not just price — gets a correct subject/body.
+  const rule = describeCondition(alert)
+  const subject = `🔔 ${alert.instrumentSymbol} — ${conditionLabel(
+    alert,
+  )} (now ${formatCurrency(alert.ltp)})`
 
-  const dirSentence =
-    alert.direction === 'below'
-      ? `price dropped to/below ${formatCurrency(alert.targetPrice)}`
-      : `price rose to/above ${formatCurrency(alert.targetPrice)}`
+  const dirSentence = `condition met — ${rule}`
 
   const noteLine = alert.note
     ? `<div style="color:#666;margin-top:4px">Your note: "${escapeHtml(
@@ -94,6 +94,91 @@ function buildAlertEmail(alert: TriggeredAlert): {
 </div>`
 
   return { subject, html }
+}
+
+// A strategy position hitting its SL/TP, shaped for the mailer. Built from a
+// Notification doc in the refresh cycle.
+export type StrategyExitEmail = {
+  instrumentSymbol: string
+  instrumentToken: string
+  kind: 'sl_hit' | 'tp_hit' | 'trail_hit' | 'tp1_partial'
+  price: number
+  quantity?: number
+  title: string
+  body: string
+  createdAt?: Date
+}
+
+function buildStrategyExitEmail(n: StrategyExitEmail): {
+  subject: string
+  html: string
+} {
+  const symbol = escapeHtml(n.instrumentSymbol || n.instrumentToken)
+  const isLoss = n.kind === 'sl_hit'
+  const emoji = isLoss ? '🔴' : n.kind === 'tp1_partial' ? '🟡' : '🟢'
+  const what =
+    n.kind === 'sl_hit'
+      ? 'SL hit'
+      : n.kind === 'tp1_partial'
+        ? 'TP1 hit'
+        : n.kind === 'trail_hit'
+          ? 'Trailing stop hit'
+          : 'TP hit'
+  const subject = `${emoji} SELL ${n.instrumentSymbol || n.instrumentToken} — ${what} @ ${formatCurrency(
+    n.price,
+  )}`
+
+  const base = process.env.APP_BASE_URL ?? ''
+  const path = `/portfolio/${encodeURIComponent(n.instrumentToken)}`
+  const link = base
+    ? `<p style="margin-top:16px"><a href="${escapeHtml(
+        base + path,
+      )}">View in app</a></p>`
+    : ''
+
+  const html = `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:560px">
+  <div style="font-weight:600;font-size:16px;color:${isLoss ? '#b91c1c' : '#15803d'}">${escapeHtml(
+    n.title,
+  )}</div>
+  <div style="color:#444;margin-top:6px">${escapeHtml(n.body)}</div>
+  <div style="color:#666;margin-top:8px">${symbol} &nbsp;•&nbsp; ${formatIstTime(
+    n.createdAt ?? null,
+  )}</div>
+  ${link}
+</div>`
+
+  return { subject, html }
+}
+
+// Send one email for a single strategy SL/TP exit. Same never-throws contract as
+// sendWatchlistAlertEmail.
+export async function sendStrategyExitEmail(
+  n: StrategyExitEmail,
+): Promise<MailResult> {
+  const transporter = getTransporter()
+  if (!transporter) {
+    return { sent: false, reason: 'not_configured' }
+  }
+  const recipients = getRecipients()
+  if (recipients.length === 0) {
+    return { sent: false, reason: 'not_configured' }
+  }
+  const { subject, html } = buildStrategyExitEmail(n)
+  try {
+    await transporter.sendMail({
+      from: process.env.GMAIL_USER,
+      to: recipients,
+      subject,
+      html,
+    })
+    return { sent: true }
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err)
+    console.log(
+      JSON.stringify({ event: 'strategy.exit.email', status: 'error', error }),
+    )
+    return { sent: false, reason: 'error', error }
+  }
 }
 
 // Send one email for a single triggered alert (per-hit delivery). Catches all

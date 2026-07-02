@@ -21,11 +21,12 @@ type QuoteData = {
   fetchedAt?: string
 }
 
-type QuoteState = {
-  token: string
-  status: 'loading' | 'ready' | 'error'
-  data: QuoteData | null
-}
+// Only ever holds a *settled* fetch (ready with data, or error). "Loading" is
+// derived at render time — a selected instrument with no settled quote for its
+// token yet — so the effect never has to setState synchronously.
+type QuoteResult =
+  | { token: string; ok: true; data: QuoteData }
+  | { token: string; ok: false }
 
 export type InstrumentTypeaheadProps = {
   value: { token: string; symbol: string } | null
@@ -45,20 +46,20 @@ export function InstrumentTypeahead({
   const [results, setResults] = useState<InstrumentResult[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [quote, setQuote] = useState<QuoteState | null>(null)
+  const [quote, setQuote] = useState<QuoteResult | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   // Tracks the most recently requested quote so a slow response for a previously
   // selected stock can't overwrite the quote of the one now selected.
   const quoteRequestRef = useRef<string | null>(null)
 
-  const lastTokenRef = useRef<string | null>(value?.token ?? null)
-  if (lastTokenRef.current !== (value?.token ?? null)) {
-    lastTokenRef.current = value?.token ?? null
+  const selectedToken = value?.token ?? null
+
+  const lastTokenRef = useRef<string | null>(selectedToken)
+  if (lastTokenRef.current !== selectedToken) {
+    lastTokenRef.current = selectedToken
+    // Selection changed from outside (e.g. form reset): sync the visible text.
+    // The quote itself is (re)fetched by the token-keyed effect below.
     setQuery(value?.symbol ?? '')
-    // Selection changed from outside (e.g. form reset): drop any stale quote.
-    // A late in-flight response is harmless — the panel only renders when the
-    // quote's token matches the current selection.
-    if (!value) setQuote(null)
   }
 
   useEffect(() => {
@@ -119,31 +120,45 @@ export function InstrumentTypeahead({
     onChange(result)
     setQuery(result.symbol)
     setOpen(false)
-    void fetchQuote(result)
   }
 
-  async function fetchQuote(result: InstrumentResult) {
-    quoteRequestRef.current = result.token
-    setQuote({ token: result.token, status: 'loading', data: null })
-    try {
-      const res = await fetch(
-        `/api/quote?token=${encodeURIComponent(result.token)}&exchange=${result.exchange}`,
-        { credentials: 'include' },
-      )
-      // A newer selection superseded this request: ignore the late response.
-      if (quoteRequestRef.current !== result.token) return
-      if (!res.ok) {
-        setQuote({ token: result.token, status: 'error', data: null })
-        return
-      }
-      const data = (await res.json()) as QuoteData
-      if (quoteRequestRef.current !== result.token) return
-      setQuote({ token: result.token, status: 'ready', data })
-    } catch {
-      if (quoteRequestRef.current !== result.token) return
-      setQuote({ token: result.token, status: 'error', data: null })
+  // Fetch a live quote whenever a concrete instrument is selected — keyed on the
+  // token so it fires once per selection and, crucially, also when the instrument
+  // arrives pre-filled rather than picked from the dropdown (the per-instrument
+  // "Add transaction" card and the edit dialog both open with a token already
+  // set). The exchange is resolved server-side from the instrument record, so we
+  // don't need to thread it through here.
+  useEffect(() => {
+    if (!selectedToken) {
+      quoteRequestRef.current = null
+      return
     }
-  }
+    const token = selectedToken
+    quoteRequestRef.current = token
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`/api/quote?token=${encodeURIComponent(token)}`, {
+          credentials: 'include',
+        })
+        // A newer selection superseded this request, or the effect was cleaned up.
+        if (cancelled || quoteRequestRef.current !== token) return
+        if (!res.ok) {
+          setQuote({ token, ok: false })
+          return
+        }
+        const data = (await res.json()) as QuoteData
+        if (cancelled || quoteRequestRef.current !== token) return
+        setQuote({ token, ok: true, data })
+      } catch {
+        if (cancelled || quoteRequestRef.current !== token) return
+        setQuote({ token, ok: false })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedToken])
 
   return (
     <div ref={containerRef} className="relative">
@@ -195,21 +210,25 @@ export function InstrumentTypeahead({
             ))}
         </ul>
       )}
-      {value && quote && quote.token === value.token && (
-        <QuotePanel quote={quote} />
+      {value && (
+        <QuotePanel
+          result={quote && quote.token === value.token ? quote : null}
+        />
       )}
     </div>
   )
 }
 
-function QuotePanel({ quote }: { quote: QuoteState }) {
-  if (quote.status === 'loading') {
+// `result` is the settled quote for the current selection, or null while the
+// fetch is still in flight (or superseded) — which renders as "Fetching…".
+function QuotePanel({ result }: { result: QuoteResult | null }) {
+  if (!result) {
     return (
       <p className="text-muted-foreground mt-2 text-xs">Fetching live price…</p>
     )
   }
 
-  if (quote.status === 'error') {
+  if (!result.ok) {
     return (
       <p className="text-muted-foreground mt-2 text-xs">
         Couldn&apos;t load the current price.
@@ -217,7 +236,7 @@ function QuotePanel({ quote }: { quote: QuoteState }) {
     )
   }
 
-  const { ltp, netChange, pctChange, fetchedAt } = quote.data ?? {}
+  const { ltp, netChange, pctChange, fetchedAt } = result.data
   if (ltp === undefined) {
     return (
       <p className="text-muted-foreground mt-2 text-xs">

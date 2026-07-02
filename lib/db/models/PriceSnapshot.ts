@@ -11,6 +11,14 @@ const priceSnapshotSchema = new Schema({
   close: { type: Number },
   netChange: { type: Number },
   pctChange: { type: Number },
+  // Extra FULL-quote fields, kept for advanced alert conditions (volume spike,
+  // 52-week breakout, circuit) that were previously fetched but discarded.
+  tradeVolume: { type: Number },
+  week52High: { type: Number },
+  week52Low: { type: Number },
+  upperCircuit: { type: Number },
+  lowerCircuit: { type: Number },
+  avgPrice: { type: Number },
   fetchedAt: { type: Date, required: true, default: Date.now },
 })
 

@@ -34,8 +34,20 @@ vi.mock('@/lib/db/models/HoldingAlert', () => ({
   HoldingAlerts: { find: vi.fn() },
 }))
 
+vi.mock('@/lib/db/models/Notification', () => ({
+  Notification: { create: vi.fn().mockResolvedValue({}) },
+  // No real DB in tests, so keep index reconciliation a resolved no-op.
+  ensureNotificationIndexes: vi.fn().mockResolvedValue(undefined),
+}))
+
 vi.mock('@/lib/watchlist/evaluate', () => ({
   evaluateWatchlistAlerts: vi.fn().mockResolvedValue([]),
+}))
+
+// Indicator refresh is exercised in its own suite; here we stub it so no candle
+// endpoint or IndicatorSnapshot model is touched, and it returns an empty map.
+vi.mock('@/lib/indicators/refresh', () => ({
+  refreshIndicatorSnapshots: vi.fn().mockResolvedValue(new Map()),
 }))
 
 vi.mock('@/lib/email/mailer', () => ({
@@ -56,7 +68,7 @@ vi.mock('@/lib/angelone/session', () => ({
 vi.mock('@/lib/strategy/evaluate', () => ({
   evaluateEntries: vi
     .fn()
-    .mockResolvedValue({ evaluated: 0, transitioned: 0 }),
+    .mockResolvedValue({ evaluated: 0, transitioned: 0, exits: [] }),
   OPEN_ENTRY_STATUSES: ['pending', 'active', 'partial', 'trailing'],
 }))
 
@@ -123,7 +135,7 @@ beforeEach(() => {
   bulkWriteMock.mockResolvedValue(undefined)
   invalidateSessionMock.mockResolvedValue(undefined)
   getValidSessionMock.mockResolvedValue({ jwtToken: 'jwt', feedToken: 'feed' })
-  evaluateMock.mockResolvedValue({ evaluated: 0, transitioned: 0 })
+  evaluateMock.mockResolvedValue({ evaluated: 0, transitioned: 0, exits: [] })
   // No watchlist alerts by default: token-collection (projected, .lean()) and
   // the hydrated fetch (awaited directly) both return empty.
   watchlistFindMock.mockImplementation((_filter: unknown, projection?: unknown) =>
@@ -167,7 +179,7 @@ describe('runRefreshCycle', () => {
       { token: 'T2', ltp: 200, fetchedAt },
     ]
     getQuotesMock.mockResolvedValue(snapshots)
-    evaluateMock.mockResolvedValue({ evaluated: 1, transitioned: 0 })
+    evaluateMock.mockResolvedValue({ evaluated: 1, transitioned: 0, exits: [] })
 
     const result = await runRefreshCycle()
 

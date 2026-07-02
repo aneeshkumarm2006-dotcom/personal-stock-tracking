@@ -413,6 +413,106 @@ describe('evaluateEntries', () => {
   })
 })
 
+describe('evaluateEntries — exits (notification triggers)', () => {
+  it('records an sl_hit exit for the full quantity, carrying the gate flag', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      instrumentSymbol: 'A',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      quantity: 10,
+      status: 'active',
+      enteredToPortfolio: true,
+    })
+    const out = await evaluateEntries([entry], [snap('T1', 90)])
+    expect(out.exits).toHaveLength(1)
+    expect(out.exits[0]).toMatchObject({
+      kind: 'sl_hit',
+      quantity: 10,
+      instrumentToken: 'T1',
+      instrumentSymbol: 'A',
+      enteredToPortfolio: true,
+      price: 90,
+    })
+  })
+
+  it('records a tp_hit exit for a single-target full exit (gate defaults false)', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      quantity: 10,
+      status: 'active',
+    })
+    const out = await evaluateEntries([entry], [snap('T1', 110)])
+    expect(out.exits).toHaveLength(1)
+    expect(out.exits[0]).toMatchObject({
+      kind: 'tp_hit',
+      quantity: 10,
+      enteredToPortfolio: false,
+    })
+  })
+
+  it('records a tp1_partial exit for the sold half in scale mode', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      target2: 120,
+      quantity: 4,
+      status: 'active',
+    })
+    const out = await evaluateEntries([entry], [snap('T1', 110)])
+    expect(out.exits).toHaveLength(1)
+    expect(out.exits[0]).toMatchObject({ kind: 'tp1_partial', quantity: 2 })
+  })
+
+  it('records a trail_hit exit on a trailing-stop pullback', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      quantity: 1,
+      status: 'trailing',
+      peakPrice: 130,
+    })
+    const out = await evaluateEntries([entry], [snap('T1', 119)])
+    expect(out.exits).toHaveLength(1)
+    expect(out.exits[0]).toMatchObject({ kind: 'trail_hit', quantity: 1 })
+  })
+
+  it('does NOT record an exit for a fill (pending → active)', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      status: 'pending',
+    })
+    const out = await evaluateEntries([entry], [snap('T1', 100)])
+    expect(entry.status).toBe('active')
+    expect(out.exits).toHaveLength(0)
+  })
+
+  it('does NOT record an exit when a single share starts trailing at TP1', async () => {
+    const entry = makeEntry({
+      instrumentToken: 'T1',
+      entryPrice: 100,
+      stopLoss: 90,
+      targetPrice: 110,
+      quantity: 1,
+      status: 'active',
+    })
+    const out = await evaluateEntries([entry], [snap('T1', 110)])
+    expect(entry.status).toBe('trailing')
+    expect(out.exits).toHaveLength(0)
+  })
+})
+
 describe('computeGroupStats', () => {
   it('computes capital deployed/free, win rate, and R:R correctly', () => {
     const group = { allocatedCapital: 10000 }

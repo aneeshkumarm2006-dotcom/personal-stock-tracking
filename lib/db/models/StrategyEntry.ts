@@ -74,6 +74,14 @@ const strategyEntrySchema = new Schema(
     // Free-form labels for organising entries (e.g. "swing", "earnings",
     // "mistake"). Editable on any entry regardless of status.
     tags: { type: [String], default: [] },
+    // Set when this planned entry is turned into a REAL portfolio position via
+    // the "Enter into portfolio" flow. `enteredToPortfolio` is the gate that
+    // decides whether an SL/TP hit fires a loud alert (only real positions do);
+    // `portfolioTransactionId` links to the BUY that was created. Existing docs
+    // read these back as falsy/undefined, so they're excluded by default.
+    enteredToPortfolio: { type: Boolean, default: false },
+    portfolioTransactionId: { type: Schema.Types.ObjectId, ref: 'Transaction' },
+    enteredAt: { type: Date },
   },
   { timestamps: true },
 )

@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { AuthError, RateLimitError } from '@/lib/angelone/errors'
 import { getQuotes, type ExchangeTokens } from '@/lib/angelone/quotes'
 import { getValidSession, invalidateSession } from '@/lib/angelone/session'
+import { connectDB } from '@/lib/db/connect'
+import { Instrument } from '@/lib/db/models/Instrument'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +16,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const token = (searchParams.get('token') ?? '').trim()
-  const exchangeRaw = (searchParams.get('exchange') ?? 'NSE').trim().toUpperCase()
+  const exchangeHint = (searchParams.get('exchange') ?? '').trim().toUpperCase()
 
   if (!token) {
     return NextResponse.json(
@@ -23,7 +25,19 @@ export async function GET(request: Request) {
     )
   }
 
-  const exchange: 'NSE' | 'BSE' = exchangeRaw === 'BSE' ? 'BSE' : 'NSE'
+  // The exchange decides which segment Angel One prices. The typeahead knows it
+  // when a stock is picked from search, but not when the instrument arrives
+  // pre-filled (per-instrument "Add transaction" / edit dialog) — so resolve it
+  // from the instrument record, the app's source of truth for a token's
+  // exchange. Fall back to the caller's hint, then NSE.
+  await connectDB()
+  const instrument = await Instrument.findOne({ token }).lean()
+  const exchange: 'NSE' | 'BSE' =
+    instrument?.exchange === 'BSE' || instrument?.exchange === 'NSE'
+      ? instrument.exchange
+      : exchangeHint === 'BSE'
+        ? 'BSE'
+        : 'NSE'
   const grouped: ExchangeTokens = { [exchange]: [token] }
 
   try {

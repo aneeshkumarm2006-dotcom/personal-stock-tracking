@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server'
 
 import { connectDB } from '@/lib/db/connect'
 import { HoldingAlerts } from '@/lib/db/models/HoldingAlert'
-import { holdingAlertCreateSchema } from '@/lib/validation/schemas'
+import {
+  alertCreateSchema,
+  holdingAlertMetaSchema,
+} from '@/lib/validation/schemas'
+import { buildAlertSubdoc } from '@/lib/alerts/subdoc'
 import type { RawWatchlistAlert } from '@/lib/watchlist/enrich'
 import type { WatchlistAlertView } from '@/lib/watchlist/types'
 
@@ -12,11 +16,14 @@ type Context = { params: Promise<{ token: string }> }
 
 // Serialize an embedded alert subdoc into the view shape the client renders.
 // Identical shape to the watchlist alert view, so the same UI can render it.
+// `.lean()` reads don't apply schema defaults, so default `type` to 'price'.
 function toView(a: RawWatchlistAlert): WatchlistAlertView {
   return {
     _id: String(a._id),
-    targetPrice: a.targetPrice,
+    type: a.type ?? 'price',
+    targetPrice: typeof a.targetPrice === 'number' ? a.targetPrice : null,
     direction: a.direction ?? 'below',
+    config: a.config ?? {},
     status: a.status ?? 'armed',
     lastTriggeredAt: a.lastTriggeredAt
       ? new Date(a.lastTriggeredAt).toISOString()
@@ -27,7 +34,7 @@ function toView(a: RawWatchlistAlert): WatchlistAlertView {
   }
 }
 
-// List the price-cross alerts for a holding.
+// List the alerts for a holding.
 export async function GET(_request: Request, { params }: Context) {
   const { token } = await params
   await connectDB()
@@ -38,9 +45,9 @@ export async function GET(_request: Request, { params }: Context) {
   return NextResponse.json({ instrumentToken: token, alerts })
 }
 
-// Add a price-cross alert to a holding. Uses the hydrated document so Mongoose
-// generates the embedded alert's _id (a raw $push would not), upserting the
-// per-instrument doc on the first alert.
+// Add an alert (any condition type) to a holding. Uses the hydrated document so
+// Mongoose generates the embedded alert's _id (a raw $push would not), upserting
+// the per-instrument doc on the first alert.
 export async function POST(request: Request, { params }: Context) {
   const { token } = await params
 
@@ -51,36 +58,34 @@ export async function POST(request: Request, { params }: Context) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const parsed = holdingAlertCreateSchema.safeParse(body)
+  const parsed = alertCreateSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'Validation failed', issues: parsed.error.issues },
       { status: 400 },
     )
   }
+  // symbol/exchange ride the same body but are stripped from the condition; parse
+  // them separately so the first POST can seed the per-instrument doc.
+  const meta = holdingAlertMetaSchema.safeParse(body)
+  const instrumentSymbol = meta.success ? meta.data.instrumentSymbol : undefined
+  const exchange = meta.success ? meta.data.exchange : undefined
 
   await connectDB()
   let doc = await HoldingAlerts.findOne({ instrumentToken: token })
   if (!doc) {
     doc = new HoldingAlerts({
       instrumentToken: token,
-      instrumentSymbol: parsed.data.instrumentSymbol ?? '',
-      exchange: parsed.data.exchange ?? 'NSE',
+      instrumentSymbol: instrumentSymbol ?? '',
+      exchange: exchange ?? 'NSE',
     })
   } else {
     // Keep the symbol/exchange fresh so the trigger email stays accurate.
-    if (parsed.data.instrumentSymbol) {
-      doc.instrumentSymbol = parsed.data.instrumentSymbol
-    }
-    if (parsed.data.exchange) doc.exchange = parsed.data.exchange
+    if (instrumentSymbol) doc.instrumentSymbol = instrumentSymbol
+    if (exchange) doc.exchange = exchange
   }
 
-  doc.alerts.push({
-    targetPrice: parsed.data.targetPrice,
-    direction: parsed.data.direction,
-    note: parsed.data.note ?? '',
-    status: parsed.data.status ?? 'armed',
-  })
+  doc.alerts.push(buildAlertSubdoc(parsed.data))
   await doc.save()
 
   const created = doc.alerts[doc.alerts.length - 1]

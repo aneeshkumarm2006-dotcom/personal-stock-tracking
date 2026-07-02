@@ -2,14 +2,15 @@ import { NextResponse } from 'next/server'
 
 import { connectDB } from '@/lib/db/connect'
 import { WatchlistItem } from '@/lib/db/models/WatchlistItem'
-import { priceAlertSchema } from '@/lib/validation/schemas'
+import { alertCreateSchema } from '@/lib/validation/schemas'
+import { buildAlertSubdoc } from '@/lib/alerts/subdoc'
 
 export const dynamic = 'force-dynamic'
 
 type Context = { params: Promise<{ token: string }> }
 
-// Add a price-cross alert to a watchlist item. Uses the hydrated document so
-// Mongoose generates the embedded alert's _id (a raw $push would not).
+// Add an alert (any condition type) to a watchlist item. Uses the hydrated
+// document so Mongoose generates the embedded alert's _id (a raw $push would not).
 export async function POST(request: Request, { params }: Context) {
   const { token } = await params
 
@@ -20,7 +21,7 @@ export async function POST(request: Request, { params }: Context) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const parsed = priceAlertSchema.safeParse(body)
+  const parsed = alertCreateSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'Validation failed', issues: parsed.error.issues },
@@ -34,12 +35,7 @@ export async function POST(request: Request, { params }: Context) {
     return NextResponse.json({ error: 'Item not found' }, { status: 404 })
   }
 
-  doc.alerts.push({
-    targetPrice: parsed.data.targetPrice,
-    direction: parsed.data.direction,
-    note: parsed.data.note ?? '',
-    status: parsed.data.status ?? 'armed',
-  })
+  doc.alerts.push(buildAlertSubdoc(parsed.data))
   await doc.save()
 
   const created = doc.alerts[doc.alerts.length - 1]

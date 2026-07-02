@@ -29,6 +29,8 @@ export type EntryForStats = {
   events?: StrategyEvent[]
   tags?: string[]
   createdAt?: Date | string | null
+  // True once the entry has been turned into a real portfolio position.
+  enteredToPortfolio?: boolean
 }
 
 export type EntryStats = {
@@ -59,6 +61,9 @@ export type EntryStats = {
   tags: string[]
   // When the trade idea was created. ISO string, or null for legacy rows.
   createdAt: string | null
+  // Whether this entry is a real, held portfolio position (drives the loud
+  // SL/TP alert and the "In portfolio" badge / hides the Enter action).
+  enteredToPortfolio: boolean
 }
 
 export type GroupStats = {
@@ -174,6 +179,7 @@ export function computeGroupStats(
       totalPnL: round2(realized + unrealized),
       tags: e.tags ?? [],
       createdAt: e.createdAt ? new Date(e.createdAt).toISOString() : null,
+      enteredToPortfolio: e.enteredToPortfolio ?? false,
     })
   }
 

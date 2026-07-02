@@ -73,7 +73,15 @@ export type TriggerType = 'limit' | 'stop'
 export type RequestedTriggerType = TriggerType | 'auto'
 
 export interface EvaluatableEntry {
+  // Present on real Mongoose docs; used to identify the entry when an exit is
+  // turned into a notification. Absent on synthetic/legacy rows.
+  _id?: unknown
+  groupId?: unknown
   instrumentToken: string
+  instrumentSymbol?: string
+  // Whether this entry is a real, held portfolio position — the gate that
+  // decides if an SL/TP exit fires a loud alert.
+  enteredToPortfolio?: boolean
   entryPrice: number
   stopLoss: number
   targetPrice: number
@@ -122,9 +130,32 @@ export function resolveTriggerType(
 
 export type ExitMode = 'trail' | 'scale' | 'single'
 
+// An action-required exit an entry made THIS cycle — the trigger for a
+// notification/email/push. Only exits that mean "go sell" are recorded (SL, a
+// full TP, a scale-out half at TP1, a trailing-stop exit); informational
+// transitions (fill, TP1-start-trailing, expiry) are not.
+export type StrategyExitKind = 'sl_hit' | 'tp_hit' | 'trail_hit' | 'tp1_partial'
+
+export type StrategyExit = {
+  entryId: string
+  groupId: string
+  instrumentToken: string
+  instrumentSymbol: string
+  kind: StrategyExitKind
+  // The live price at the crossing and the number of shares to act on now.
+  price: number
+  quantity: number
+  // Gate: only entries backed by a real portfolio position raise a loud alert.
+  enteredToPortfolio: boolean
+  at: Date
+}
+
 export type EvaluationOutcome = {
   evaluated: number
   transitioned: number
+  // Action-required exits made this cycle (see StrategyExit). Additive: existing
+  // callers that only read evaluated/transitioned are unaffected.
+  exits: StrategyExit[]
 }
 
 // Which exit playbook an entry follows, decided automatically by quantity:
@@ -194,6 +225,26 @@ export async function evaluateEntries(
   const ltpByToken = indexSnapshots(snapshots)
   let evaluated = 0
   let transitioned = 0
+  const exits: StrategyExit[] = []
+
+  const recordExit = (
+    entry: EvaluatableEntry,
+    kind: StrategyExitKind,
+    price: number,
+    quantity: number,
+  ) => {
+    exits.push({
+      entryId: entry._id != null ? String(entry._id) : '',
+      groupId: entry.groupId != null ? String(entry.groupId) : '',
+      instrumentToken: entry.instrumentToken,
+      instrumentSymbol: entry.instrumentSymbol ?? '',
+      kind,
+      price,
+      quantity,
+      enteredToPortfolio: entry.enteredToPortfolio ?? false,
+      at: now,
+    })
+  }
 
   for (const entry of entries) {
     if (!OPEN.has(entry.status)) continue
@@ -240,8 +291,10 @@ export async function evaluateEntries(
               quantity: entry.quantity,
               timestamp: now,
             })
+            recordExit(entry, 'tp_hit', ltp, entry.quantity)
           } else if (mode === 'trail') {
-            // Single share: don't sell — start trailing the stop from here.
+            // Single share: don't sell — start trailing the stop from here. No
+            // exit to notify: nothing needs to be sold at TP1.
             entry.peakPrice = ltp
             entry.status = 'trailing'
             entry.events.push({ type: 'tp1_hit', price: ltp, timestamp: now })
@@ -257,6 +310,7 @@ export async function evaluateEntries(
               quantity: sold,
               timestamp: now,
             })
+            recordExit(entry, 'tp1_partial', ltp, sold)
           }
           await entry.save()
           transitioned += 1
@@ -272,6 +326,7 @@ export async function evaluateEntries(
             quantity: entry.quantity,
             timestamp: now,
           })
+          recordExit(entry, 'sl_hit', ltp, entry.quantity)
           await entry.save()
           transitioned += 1
         }
@@ -295,6 +350,7 @@ export async function evaluateEntries(
             quantity: entry.quantity,
             timestamp: now,
           })
+          recordExit(entry, 'tp_hit', ltp, entry.quantity)
           await entry.save()
           transitioned += 1
           continue
@@ -310,6 +366,7 @@ export async function evaluateEntries(
             quantity: entry.quantity,
             timestamp: now,
           })
+          recordExit(entry, 'trail_hit', ltp, entry.quantity)
           await entry.save()
           transitioned += 1
           continue
@@ -340,6 +397,7 @@ export async function evaluateEntries(
             quantity: remaining,
             timestamp: now,
           })
+          recordExit(entry, 'tp_hit', ltp, remaining)
           await entry.save()
           transitioned += 1
           continue
@@ -355,6 +413,7 @@ export async function evaluateEntries(
             quantity: remaining,
             timestamp: now,
           })
+          recordExit(entry, 'trail_hit', ltp, remaining)
           await entry.save()
           transitioned += 1
           continue
@@ -377,5 +436,5 @@ export async function evaluateEntries(
     }
   }
 
-  return { evaluated, transitioned }
+  return { evaluated, transitioned, exits }
 }

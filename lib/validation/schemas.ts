@@ -149,6 +149,48 @@ export const strategyEntryUpdateSchema = strategyEntryBaseSchema
 
 export type StrategyEntryInput = z.infer<typeof strategyEntrySchema>
 
+// Turn a planned strategy entry into a real portfolio position. The user records
+// the ACTUAL fill (entry price often differs from the planned one) plus the
+// levels to track and a combined charge — the route creates a BUY transaction
+// from this and marks the entry as entered/active.
+export const strategyEnterSchema = z
+  .object({
+    entryPrice: z.number().positive('entryPrice must be greater than zero'),
+    quantity: positiveInt,
+    stopLoss: z.number().positive('stopLoss must be greater than zero'),
+    targetPrice: z.number().positive('targetPrice must be greater than zero'),
+    target2: z.number().positive('target2 must be greater than zero').optional(),
+    date: dateLike,
+    // Single combined brokerage+taxes amount, like AddTransactionDialog.
+    charges: z.number().min(0).default(0),
+    notes: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.stopLoss >= data.entryPrice) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['stopLoss'],
+        message: 'stopLoss must be below entryPrice for a long entry',
+      })
+    }
+    if (data.targetPrice <= data.entryPrice) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['targetPrice'],
+        message: 'targetPrice must be above entryPrice for a long entry',
+      })
+    }
+    if (data.target2 != null && data.target2 <= data.targetPrice) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['target2'],
+        message: 'target2 must be above target1 (TP1)',
+      })
+    }
+  })
+
+export type StrategyEnterInput = z.infer<typeof strategyEnterSchema>
+
 // Replace the full tag set on a strategy entry. An empty array clears tags.
 export const strategyEntryTagsSchema = z.object({
   tags: z.array(z.string()).max(50, 'too many tags'),
@@ -205,28 +247,159 @@ export const watchlistItemUpdateSchema = z
 
 export type WatchlistItemUpdateInput = z.infer<typeof watchlistItemUpdateSchema>
 
-// Create or fully edit one alert. `status` is optional on create (the model
-// defaults to 'armed').
-export const priceAlertSchema = z.object({
-  targetPrice: z.number().positive('targetPrice must be greater than zero'),
-  direction: alertDirectionEnum.default('below'),
+// --- Alerts (discriminated by `type`) -------------------------------------
+// `price` is the original/Normal alert (kept flat with top-level targetPrice +
+// direction for backward compatibility). Every other member is an Advanced
+// condition carrying its parameters in `config`. Cross direction for
+// price/pct_change/sma_cross/ema_cross lives in the top-level `direction`.
+
+const sharedAlertFields = {
   note: z.string().max(500).optional(),
   status: alertStatusEnum.optional(),
+}
+const periodInt = z.number().int().positive().max(400)
+
+const priceCondition = z.object({
+  type: z.literal('price'),
+  targetPrice: z.number().positive('targetPrice must be greater than zero'),
+  direction: alertDirectionEnum.default('below'),
+  ...sharedAlertFields,
+})
+const pctChangeCondition = z.object({
+  type: z.literal('pct_change'),
+  direction: alertDirectionEnum.default('above'),
+  config: z.object({ thresholdPct: z.number().positive() }),
+  ...sharedAlertFields,
+})
+const volumeCondition = z.object({
+  type: z.literal('volume'),
+  config: z
+    .object({
+      mode: z.literal('spike').default('spike'),
+      multiple: z.number().positive().default(2),
+    })
+    .optional(),
+  ...sharedAlertFields,
+})
+const week52Condition = z.object({
+  type: z.literal('week52'),
+  config: z.object({
+    edge: z.enum(['high', 'low']),
+    marginPct: z.number().min(0).max(100).default(0),
+  }),
+  ...sharedAlertFields,
+})
+const circuitCondition = z.object({
+  type: z.literal('circuit'),
+  config: z
+    .object({ band: z.enum(['upper', 'lower', 'either']).default('either') })
+    .optional(),
+  ...sharedAlertFields,
+})
+const smaCrossCondition = z.object({
+  type: z.literal('sma_cross'),
+  direction: alertDirectionEnum.default('below'),
+  config: z.object({ period: periodInt }),
+  ...sharedAlertFields,
+})
+const emaCrossCondition = z.object({
+  type: z.literal('ema_cross'),
+  direction: alertDirectionEnum.default('below'),
+  config: z.object({ period: periodInt }),
+  ...sharedAlertFields,
+})
+const rsiCondition = z.object({
+  type: z.literal('rsi'),
+  config: z.object({
+    rsiBand: z.enum(['overbought', 'oversold']),
+    threshold: z.number().min(1).max(99).optional(),
+    period: periodInt.default(14),
+  }),
+  ...sharedAlertFields,
+})
+const macdCrossCondition = z.object({
+  type: z.literal('macd_cross'),
+  config: z.object({ macdDirection: z.enum(['bullish', 'bearish']) }),
+  ...sharedAlertFields,
+})
+const ratingFlipCondition = z.object({
+  type: z.literal('rating_flip'),
+  config: z
+    .object({
+      timeframe: z.enum(['1D', '1W', '1M']).default('1D'),
+      to: z.enum(['buy', 'sell', 'neutral', 'any']).default('any'),
+    })
+    .optional(),
+  ...sharedAlertFields,
 })
 
-export type PriceAlertInput = z.infer<typeof priceAlertSchema>
+export const alertConditionSchema = z.discriminatedUnion('type', [
+  priceCondition,
+  pctChangeCondition,
+  volumeCondition,
+  week52Condition,
+  circuitCondition,
+  smaCrossCondition,
+  emaCrossCondition,
+  rsiCondition,
+  macdCrossCondition,
+  ratingFlipCondition,
+])
 
-// Snooze / disable / re-arm or partial edit: a body of just { status } is valid.
-export const priceAlertUpdateSchema = priceAlertSchema.partial()
+// Create one alert. A body with no `type` is a legacy price alert (the old
+// watchlist/portfolio clients POST { targetPrice, direction, note }), so inject
+// type:'price' before discriminating — this keeps the old wire format working.
+export const alertCreateSchema = z.preprocess(
+  (v) =>
+    v && typeof v === 'object' && !Array.isArray(v) && !('type' in v)
+      ? { ...(v as Record<string, unknown>), type: 'price' }
+      : v,
+  alertConditionSchema,
+)
 
-export type PriceAlertUpdateInput = z.infer<typeof priceAlertUpdateSchema>
+export type AlertCreateInput = z.infer<typeof alertConditionSchema>
 
-// Holding (portfolio) alerts reuse the same alert fields, plus optional
-// symbol/exchange so the first POST can seed the per-instrument doc (the cron
-// needs them for the trigger email).
-export const holdingAlertCreateSchema = priceAlertSchema.extend({
+// Snooze / disable / re-arm or note-only edit: a body of just { status } and/or
+// { note }. Tried AFTER the full-condition schema so a full re-submit (which
+// carries `type` or a legacy targetPrice+direction) is treated as a replace, not
+// a note patch.
+const alertStatusPatchSchema = z
+  .object({
+    status: alertStatusEnum.optional(),
+    note: z.string().max(500).optional(),
+  })
+  .refine((o) => o.status !== undefined || o.note !== undefined, {
+    message: 'Provide a status and/or note to update',
+  })
+
+export const alertUpdateSchema = z.union([
+  alertCreateSchema,
+  alertStatusPatchSchema,
+])
+
+export type AlertUpdateInput = z.infer<typeof alertUpdateSchema>
+
+// Holding (portfolio) alerts additionally accept symbol/exchange on create so the
+// first POST can seed the per-instrument doc (the cron needs them for the trigger
+// email). Parsed separately from the condition (which strips unknown keys).
+export const holdingAlertMetaSchema = z.object({
   instrumentSymbol: z.string().optional(),
   exchange: exchangeEnum.optional(),
 })
 
-export type HoldingAlertCreateInput = z.infer<typeof holdingAlertCreateSchema>
+export type HoldingAlertMetaInput = z.infer<typeof holdingAlertMetaSchema>
+
+// --- Web Push ---
+
+// The shape a browser PushSubscription serialises to (sub.toJSON()), plus the
+// device's user agent for humans to tell subscriptions apart.
+export const pushSubscribeSchema = z.object({
+  endpoint: z.string().min(1),
+  keys: z.object({
+    p256dh: z.string().min(1),
+    auth: z.string().min(1),
+  }),
+  userAgent: z.string().optional(),
+})
+
+export type PushSubscribeInput = z.infer<typeof pushSubscribeSchema>

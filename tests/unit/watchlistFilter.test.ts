@@ -89,8 +89,8 @@ describe('applyWatchlistFilters — filtering', () => {
 
   it('filters by alert status', () => {
     const items = [
-      makeView({ instrumentToken: 'armed', armedCount: 1, alerts: [{ _id: 'x', targetPrice: 1, direction: 'below', status: 'armed', lastTriggeredAt: null, lastTriggeredPrice: null, note: '' }] }),
-      makeView({ instrumentToken: 'trig', triggeredCount: 1, alerts: [{ _id: 'y', targetPrice: 1, direction: 'below', status: 'triggered', lastTriggeredAt: null, lastTriggeredPrice: null, note: '' }] }),
+      makeView({ instrumentToken: 'armed', armedCount: 1, alerts: [{ _id: 'x', type: 'price', config: {}, targetPrice: 1, direction: 'below', status: 'armed', lastTriggeredAt: null, lastTriggeredPrice: null, note: '' }] }),
+      makeView({ instrumentToken: 'trig', triggeredCount: 1, alerts: [{ _id: 'y', type: 'price', config: {}, targetPrice: 1, direction: 'below', status: 'triggered', lastTriggeredAt: null, lastTriggeredPrice: null, note: '' }] }),
       makeView({ instrumentToken: 'none', alerts: [] }),
     ]
     expect(applyWatchlistFilters(items, filters({ alertStatus: 'armed' })).map((i) => i.instrumentToken)).toEqual(['armed'])
@@ -189,11 +189,11 @@ describe('applyWatchlistFilters — sorting', () => {
     const items = [
       makeView({
         instrumentToken: 'early',
-        alerts: [{ _id: 'a', targetPrice: 1, direction: 'below', status: 'triggered', lastTriggeredAt: '2024-02-01T00:00:00.000Z', lastTriggeredPrice: 1, note: '' }],
+        alerts: [{ _id: 'a', type: 'price', config: {}, targetPrice: 1, direction: 'below', status: 'triggered', lastTriggeredAt: '2024-02-01T00:00:00.000Z', lastTriggeredPrice: 1, note: '' }],
       }),
       makeView({
         instrumentToken: 'late',
-        alerts: [{ _id: 'b', targetPrice: 1, direction: 'below', status: 'triggered', lastTriggeredAt: '2024-05-01T00:00:00.000Z', lastTriggeredPrice: 1, note: '' }],
+        alerts: [{ _id: 'b', type: 'price', config: {}, targetPrice: 1, direction: 'below', status: 'triggered', lastTriggeredAt: '2024-05-01T00:00:00.000Z', lastTriggeredPrice: 1, note: '' }],
       }),
     ]
     expect(

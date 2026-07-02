@@ -20,23 +20,22 @@ export type PriceSnapshotData = {
   close?: number
   netChange?: number
   pctChange?: number
+  // Extra FULL-quote fields. The quote is already fetched in FULL mode every
+  // cycle; these used to be discarded. They power the quote-derived advanced
+  // alert conditions (volume spike, 52-week breakout, circuit).
+  tradeVolume?: number
+  week52High?: number
+  week52Low?: number
+  upperCircuit?: number
+  lowerCircuit?: number
+  avgPrice?: number
   fetchedAt: Date
 }
 
-type RawQuoteRow = {
-  exchange?: string
-  tradingSymbol?: string
-  tradingsymbol?: string
-  symbolToken?: string
-  symboltoken?: string
-  ltp?: number | string
-  open?: number | string
-  high?: number | string
-  low?: number | string
-  close?: number | string
-  netChange?: number | string
-  percentChange?: number | string
-}
+// Angel One's FULL rows use mixed key casing and 52-week keys that start with a
+// digit, so RawQuoteRow is intentionally loose and every field is read across
+// casing variants (mirroring lib/angelone/fullQuote.ts).
+type RawQuoteRow = Record<string, unknown>
 
 function toNumber(value: unknown): number | undefined {
   if (value === null || value === undefined || value === '') return undefined
@@ -44,21 +43,45 @@ function toNumber(value: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
+// First finite number found across the given keys (defensive multi-casing read).
+function pickNumber(row: RawQuoteRow, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const n = toNumber(row[key])
+    if (n !== undefined) return n
+  }
+  return undefined
+}
+
+function pickString(row: RawQuoteRow, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const v = row[key]
+    if (typeof v === 'string' && v.length > 0) return v
+    if (typeof v === 'number') return String(v)
+  }
+  return undefined
+}
+
 function normalize(row: RawQuoteRow, fetchedAt: Date): PriceSnapshotData | null {
-  const token = row.symbolToken ?? row.symboltoken
+  const token = pickString(row, 'symbolToken', 'symboltoken', 'token')
   if (!token) return null
 
   return {
-    token: String(token),
-    symbol: row.tradingSymbol ?? row.tradingsymbol,
-    exchange: row.exchange,
-    ltp: toNumber(row.ltp),
-    open: toNumber(row.open),
-    high: toNumber(row.high),
-    low: toNumber(row.low),
-    close: toNumber(row.close),
-    netChange: toNumber(row.netChange),
-    pctChange: toNumber(row.percentChange),
+    token,
+    symbol: pickString(row, 'tradingSymbol', 'tradingsymbol', 'symbol'),
+    exchange: pickString(row, 'exchange'),
+    ltp: pickNumber(row, 'ltp'),
+    open: pickNumber(row, 'open'),
+    high: pickNumber(row, 'high'),
+    low: pickNumber(row, 'low'),
+    close: pickNumber(row, 'close'),
+    netChange: pickNumber(row, 'netChange', 'netchange'),
+    pctChange: pickNumber(row, 'percentChange', 'percentchange', 'pChange'),
+    tradeVolume: pickNumber(row, 'tradeVolume', 'tradevolume', 'volume'),
+    week52High: pickNumber(row, '52WeekHigh', '52weekHigh', 'weekHigh52'),
+    week52Low: pickNumber(row, '52WeekLow', '52weekLow', 'weekLow52'),
+    upperCircuit: pickNumber(row, 'upperCircuit', 'uppercircuit'),
+    lowerCircuit: pickNumber(row, 'lowerCircuit', 'lowercircuit'),
+    avgPrice: pickNumber(row, 'avgPrice', 'avgprice'),
     fetchedAt,
   }
 }
@@ -234,6 +257,11 @@ function candleToSnapshot(
     close: prev?.close,
     netChange,
     pctChange,
+    // Candle volume is the session's total, same as the quote's tradeVolume, so a
+    // volume alert on a candle-fed (BE-series) stock still has a numerator. The
+    // 52-week / circuit fields aren't available from candles and stay undefined
+    // (those conditions skip on missing data).
+    tradeVolume: Number.isFinite(last.volume) ? last.volume : undefined,
     fetchedAt,
   }
 }

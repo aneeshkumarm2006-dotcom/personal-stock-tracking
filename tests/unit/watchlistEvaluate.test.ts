@@ -6,6 +6,7 @@ import {
   type WatchlistItemForEval,
 } from '@/lib/watchlist/evaluate'
 import type { PriceSnapshotData } from '@/lib/angelone/quotes'
+import type { IndicatorSnapshotData } from '@/lib/indicators/types'
 
 const NOW = new Date('2024-06-01T10:00:00Z')
 
@@ -177,5 +178,102 @@ describe('evaluateWatchlistAlerts', () => {
     expect(save).toHaveBeenCalledTimes(1)
     expect(triggered).toHaveLength(2)
     expect(triggered.map((t) => t.alertId).sort()).toEqual(['a1', 'a2'])
+  })
+})
+
+function indicators(
+  token: string,
+  partial: Partial<IndicatorSnapshotData>,
+): Map<string, IndicatorSnapshotData> {
+  return new Map([
+    [
+      token,
+      {
+        token,
+        asOfCandle: '2024-05-31T00:00:00.000Z',
+        sma: {},
+        ema: {},
+        rsi14: null,
+        macd: null,
+        macdSignal: null,
+        prevMacd: null,
+        prevSignal: null,
+        rating: {},
+        prevRating: {},
+        high52w: null,
+        low52w: null,
+        avgVolume20d: null,
+        ...partial,
+      },
+    ],
+  ])
+}
+
+describe('evaluateWatchlistAlerts — advanced conditions', () => {
+  it('carries the condition type and trigger value on the triggered alert', async () => {
+    const item = makeItem([
+      makeAlert({
+        _id: 'v',
+        type: 'volume',
+        targetPrice: undefined,
+        config: { mode: 'spike', multiple: 2 },
+      }),
+    ])
+    const snapshot: PriceSnapshotData = {
+      token: 'T1',
+      ltp: 50,
+      tradeVolume: 3_000_000,
+      fetchedAt: NOW,
+    }
+    const triggered = await evaluateWatchlistAlerts(
+      [item],
+      [snapshot],
+      NOW,
+      'watchlist',
+      indicators('T1', { avgVolume20d: 1_000_000 }),
+    )
+
+    expect(item.alerts[0]!.status).toBe('triggered')
+    expect(triggered).toHaveLength(1)
+    expect(triggered[0]).toMatchObject({
+      type: 'volume',
+      triggerValue: 3_000_000,
+    })
+  })
+
+  it('fires an sma_cross using the indicator line', async () => {
+    const item = makeItem([
+      makeAlert({
+        _id: 's',
+        type: 'sma_cross',
+        targetPrice: undefined,
+        direction: 'below',
+        config: { period: 20 },
+      }),
+    ])
+    const triggered = await evaluateWatchlistAlerts(
+      [item],
+      [snap('T1', 95)],
+      NOW,
+      'watchlist',
+      indicators('T1', { sma: { '20': 100 } }),
+    )
+    expect(triggered).toHaveLength(1)
+    expect(triggered[0]!.triggerValue).toBe(100)
+  })
+
+  it('skips an indicator alert when no indicator snapshot is available', async () => {
+    const item = makeItem([
+      makeAlert({
+        _id: 'r',
+        type: 'rsi',
+        targetPrice: undefined,
+        config: { rsiBand: 'overbought' },
+      }),
+    ])
+    // Empty indicators map — nothing to compare against, so it must not fire.
+    const triggered = await evaluateWatchlistAlerts([item], [snap('T1', 100)], NOW)
+    expect(triggered).toHaveLength(0)
+    expect(item.save).not.toHaveBeenCalled()
   })
 })

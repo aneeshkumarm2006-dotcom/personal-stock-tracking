@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { PencilIcon, Trash2Icon, XIcon } from 'lucide-react'
+import { BriefcaseIcon, PencilIcon, Trash2Icon, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +28,7 @@ import { formatCurrency, formatInt, pnlColorClass } from '@/lib/format'
 import type { EntryStats } from '@/lib/strategy/group'
 import { ManualCloseDialog } from './ManualCloseDialog'
 import { EditEntryDialog } from './EditEntryDialog'
+import { EnterPositionDialog } from './EnterPositionDialog'
 import { StrategyEntryTags } from './StrategyEntryTags'
 
 export type EntriesTableProps = {
@@ -126,6 +127,7 @@ export function EntriesTable({
   const queryClient = useQueryClient()
   const [closing, setClosing] = useState<EntryStats | null>(null)
   const [editing, setEditing] = useState<EntryStats | null>(null)
+  const [entering, setEntering] = useState<EntryStats | null>(null)
   const [deleting, setDeleting] = useState<EntryStats | null>(null)
   const [deletePending, setDeletePending] = useState(false)
 
@@ -203,6 +205,9 @@ export function EntriesTable({
               const canEdit = e.status === 'pending'
               // Open entries can be deleted outright; settled ones stay in history.
               const canDelete = canClose
+              // An assigned, open, not-yet-entered entry can be turned into a real
+              // portfolio position — which also arms its loud SL/TP alert.
+              const canEnter = !!e.instrumentToken && !e.enteredToPortfolio && canClose
               const stopMoved = e.activeStop !== e.stopLoss
               const key = e.id ?? `${e.instrumentToken}-${e.entryPrice}`
               return (
@@ -212,6 +217,16 @@ export function EntriesTable({
                       <span className="text-muted-foreground font-normal italic">
                         Unassigned
                       </span>
+                    )}
+                    {e.enteredToPortfolio && (
+                      <div className="mt-0.5">
+                        <Badge
+                          variant="outline"
+                          className="border-transparent bg-primary/10 text-primary text-[10px]"
+                        >
+                          In portfolio
+                        </Badge>
+                      </div>
                     )}
                   </TableCell>
                   <TableCell className="text-right">{formatCurrency(e.entryPrice)}</TableCell>
@@ -263,8 +278,19 @@ export function EntriesTable({
                   </TableCell>
                   {allowClose && (
                     <TableCell className="text-right">
-                      {e.id && (canClose || canEdit) ? (
+                      {e.id && (canClose || canEdit || canEnter) ? (
                         <div className="flex justify-end gap-1.5">
+                          {canEnter && (
+                            <Button
+                              size="icon-xs"
+                              variant="outline"
+                              onClick={() => setEntering(e)}
+                              aria-label="Enter into portfolio"
+                              title="Enter into portfolio"
+                            >
+                              <BriefcaseIcon className="size-3.5" />
+                            </Button>
+                          )}
                           {canEdit && (
                             <Button
                               size="icon-xs"
@@ -330,6 +356,14 @@ export function EntriesTable({
           // available again on top of the group's free capital.
           capitalAvailable={capitalFree + editing.capitalUsed}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {entering && entering.id && (
+        <EnterPositionDialog
+          entry={entering}
+          groupId={groupId}
+          onClose={() => setEntering(null)}
         />
       )}
 

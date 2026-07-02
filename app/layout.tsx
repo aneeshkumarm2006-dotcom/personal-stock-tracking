@@ -4,6 +4,8 @@ import './globals.css'
 import { QueryProvider } from '@/components/providers/QueryProvider'
 import { Nav } from '@/components/Nav'
 import { Toaster } from '@/components/ui/sonner'
+import { NotificationBanner } from '@/components/NotificationBanner'
+import { PushRegistrar } from '@/components/PushRegistrar'
 
 const inter = Inter({
   variable: '--font-sans',
@@ -13,6 +15,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Stock Tracker',
   description: 'Personal stock portfolio tracker and strategy manager',
+  manifest: '/manifest.webmanifest',
 }
 
 export default function RootLayout({
@@ -30,6 +33,8 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <QueryProvider>
+          <NotificationBanner />
+          <PushRegistrar />
           <Nav />
           <main className="flex flex-1 flex-col">{children}</main>
           <Toaster richColors position="bottom-right" />

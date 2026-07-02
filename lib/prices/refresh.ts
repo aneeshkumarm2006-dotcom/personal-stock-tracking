@@ -17,7 +17,23 @@ import {
   evaluateWatchlistAlerts,
   type WatchlistItemForEval,
 } from '@/lib/watchlist/evaluate'
-import { sendWatchlistAlertEmail } from '@/lib/email/mailer'
+import { INDICATOR_ALERT_TYPES } from '@/lib/alerts/types'
+import {
+  refreshIndicatorSnapshots,
+  type IndicatorPair,
+} from '@/lib/indicators/refresh'
+import type { IndicatorSnapshotData } from '@/lib/indicators/types'
+import { sendStrategyExitEmail, sendWatchlistAlertEmail } from '@/lib/email/mailer'
+import {
+  createAlertNotification,
+  createExitNotification,
+} from '@/lib/notifications/create'
+import { ensureNotificationIndexes } from '@/lib/db/models/Notification'
+import {
+  buildAlertPushPayload,
+  buildExitPushPayload,
+  sendPushToAll,
+} from '@/lib/push/send'
 
 export type RefreshSkipReason = 'no tokens' | 'rate_limited' | 'error'
 
@@ -34,6 +50,8 @@ export type RefreshResult =
       evaluated: number
       transitioned: number
       alertsTriggered: number
+      // Loud SL/TP notifications raised for entered-into-portfolio positions.
+      strategyAlerts: number
       durationMs: number
     }
 
@@ -108,6 +126,35 @@ async function fetchAlertableHoldingAlerts(): Promise<WatchlistItemForEval[]> {
   return docs as unknown as WatchlistItemForEval[]
 }
 
+// Tokens that have an armed indicator-derived alert (SMA/EMA/RSI/MACD/rating/
+// volume) — the only tokens for which we spend a candle call to compute an
+// IndicatorSnapshot. Watchlist alerts fire regardless of holding; holding alerts
+// are held-gated exactly like the pricing/alert union above. Legacy alerts (no
+// `type`) never match the Tier-B type filter, so they add no candle cost.
+async function collectIndicatorAlertTokens(
+  heldTokens: Set<string>,
+): Promise<Set<string>> {
+  const typeFilter = { $in: [...INDICATOR_ALERT_TYPES] }
+  const [wl, ha] = await Promise.all([
+    WatchlistItem.find(
+      { 'alerts.status': 'armed', 'alerts.type': typeFilter },
+      { instrumentToken: 1, _id: 0 },
+    ).lean(),
+    HoldingAlerts.find(
+      { 'alerts.status': 'armed', 'alerts.type': typeFilter },
+      { instrumentToken: 1, _id: 0 },
+    ).lean(),
+  ])
+  const set = new Set<string>()
+  for (const d of wl) if (d.instrumentToken) set.add(d.instrumentToken)
+  for (const d of ha) {
+    if (d.instrumentToken && heldTokens.has(d.instrumentToken)) {
+      set.add(d.instrumentToken)
+    }
+  }
+  return set
+}
+
 async function groupTokensByExchange(tokens: Set<string>): Promise<ExchangeTokens> {
   if (tokens.size === 0) return {}
   const instruments = await Instrument.find(
@@ -179,6 +226,10 @@ export async function runRefreshCycle(
   const { includeHoldings = true } = options
   const startedAt = Date.now()
   await connectDB()
+  // Drop the legacy strategy-only unique index and build the shared dedupeKey
+  // index before we may write cross-source notifications this cycle. One
+  // memoised syncIndexes per process; failures self-heal on the next cycle.
+  await ensureNotificationIndexes()
 
   const [heldTokens, strategyTokens, watchlistTokens, armedHoldingAlertTokens] =
     await Promise.all([
@@ -273,6 +324,72 @@ export async function runRefreshCycle(
     const entries = await fetchEvaluatableEntries()
     const outcome = await evaluateEntries(entries, snapshots)
 
+    // Loud SL/TP alerts, but ONLY for positions actually entered into the
+    // portfolio (real money the user has to go execute on). evaluateEntries has
+    // already persisted the terminal status; here we create the durable
+    // notification (its unique {entry,kind} index makes this fire-once, even
+    // across concurrent refresh cycles) and fan out email + web push. Every side
+    // effect is individually guarded so a single failure never aborts the cycle
+    // — same contract as the watchlist email loop below.
+    let strategyAlerts = 0
+    for (const ex of outcome.exits.filter((e) => e.enteredToPortfolio)) {
+      try {
+        const n = await createExitNotification(ex)
+        if (!n) continue // duplicate (E11000) — already delivered
+        strategyAlerts += 1
+        try {
+          await sendStrategyExitEmail({
+            instrumentSymbol: n.instrumentSymbol ?? ex.instrumentSymbol,
+            instrumentToken: n.instrumentToken,
+            kind: ex.kind,
+            price: n.price,
+            quantity: n.quantity ?? undefined,
+            title: n.title,
+            body: n.body,
+            createdAt: ex.at,
+          })
+        } catch (mailErr) {
+          console.log(
+            JSON.stringify({
+              event: 'strategy.exit.email',
+              status: 'error',
+              message:
+                mailErr instanceof Error ? mailErr.message : String(mailErr),
+            }),
+          )
+        }
+        try {
+          await sendPushToAll(
+            buildExitPushPayload({
+              title: n.title,
+              body: n.body,
+              instrumentToken: n.instrumentToken,
+              strategyEntryId: String(ex.entryId),
+              kind: ex.kind,
+            }),
+          )
+        } catch (pushErr) {
+          console.log(
+            JSON.stringify({
+              event: 'strategy.exit.push',
+              status: 'error',
+              message:
+                pushErr instanceof Error ? pushErr.message : String(pushErr),
+            }),
+          )
+        }
+      } catch (err) {
+        console.log(
+          JSON.stringify({
+            event: 'strategy.notify',
+            status: 'error',
+            entry: ex.entryId,
+            message: err instanceof Error ? err.message : String(err),
+          }),
+        )
+      }
+    }
+
     // Watchlist price-alerts ride the same fresh snapshot batch. The alert is
     // persisted as `triggered` before its email is attempted, so at-most-once
     // holds even if the email fails. Each send is guarded so one failure
@@ -283,8 +400,33 @@ export async function runRefreshCycle(
     const holdingAlertDocs = (await fetchAlertableHoldingAlerts()).filter((d) =>
       heldTokens.has(d.instrumentToken),
     )
+
+    // Indicator-derived alerts (SMA/EMA/RSI/MACD/rating/volume) need a daily
+    // IndicatorSnapshot. Compute it only for tokens that actually have such an
+    // armed alert, and only for tokens in this cycle's quote batch (so we have a
+    // live ltp to compare against). Fresh snapshots are reused with no candle
+    // call; the whole step is skipped when nobody uses Tier-B alerts.
+    const indicatorAlertTokens = await collectIndicatorAlertTokens(heldTokens)
+    const indicatorPairs: IndicatorPair[] = []
+    for (const t of grouped.NSE ?? []) {
+      if (indicatorAlertTokens.has(t)) indicatorPairs.push({ token: t, exchange: 'NSE' })
+    }
+    for (const t of grouped.BSE ?? []) {
+      if (indicatorAlertTokens.has(t)) indicatorPairs.push({ token: t, exchange: 'BSE' })
+    }
+    const indicators: Map<string, IndicatorSnapshotData> =
+      indicatorPairs.length > 0
+        ? await refreshIndicatorSnapshots(indicatorPairs)
+        : new Map()
+
     const triggered = [
-      ...(await evaluateWatchlistAlerts(watchItems, snapshots)),
+      ...(await evaluateWatchlistAlerts(
+        watchItems,
+        snapshots,
+        undefined,
+        'watchlist',
+        indicators,
+      )),
       // Portfolio holding alerts ride the same snapshot batch; tagged 'portfolio'
       // so the email links back to the stock page instead of the watchlist.
       ...(await evaluateWatchlistAlerts(
@@ -292,18 +434,58 @@ export async function runRefreshCycle(
         snapshots,
         undefined,
         'portfolio',
+        indicators,
       )),
     ]
+    // Each triggered alert now gets the same loud treatment as a strategy exit:
+    // a durable Notification (→ banner + alarm) plus web-push, in addition to the
+    // email. The evaluator already fired-once (armed -> triggered, persisted),
+    // and createAlertNotification's dedupeKey guards against a refresh-cycle race
+    // — a duplicate returns null, so we skip the email/push for it. Every side
+    // effect is individually guarded so one failure never aborts the cycle.
     for (const t of triggered) {
       try {
-        await sendWatchlistAlertEmail(t)
-      } catch (mailErr) {
+        const n = await createAlertNotification(t)
+        if (!n) continue // duplicate (E11000) — already delivered
+        try {
+          await sendWatchlistAlertEmail(t)
+        } catch (mailErr) {
+          console.log(
+            JSON.stringify({
+              event: 'watchlist.alert.email',
+              status: 'error',
+              message:
+                mailErr instanceof Error ? mailErr.message : String(mailErr),
+            }),
+          )
+        }
+        try {
+          await sendPushToAll(
+            buildAlertPushPayload({
+              title: n.title,
+              body: n.body,
+              instrumentToken: t.instrumentToken,
+              alertId: t.alertId,
+              source: t.source,
+            }),
+          )
+        } catch (pushErr) {
+          console.log(
+            JSON.stringify({
+              event: 'watchlist.alert.push',
+              status: 'error',
+              message:
+                pushErr instanceof Error ? pushErr.message : String(pushErr),
+            }),
+          )
+        }
+      } catch (err) {
         console.log(
           JSON.stringify({
-            event: 'watchlist.alert.email',
+            event: 'watchlist.notify',
             status: 'error',
-            message:
-              mailErr instanceof Error ? mailErr.message : String(mailErr),
+            token: t.instrumentToken,
+            message: err instanceof Error ? err.message : String(err),
           }),
         )
       }
@@ -315,6 +497,7 @@ export async function runRefreshCycle(
       evaluated: outcome.evaluated,
       transitioned: outcome.transitioned,
       alertsTriggered: triggered.length,
+      strategyAlerts,
       durationMs: Date.now() - startedAt,
     }
   } catch (err) {

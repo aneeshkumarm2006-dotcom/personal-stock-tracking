@@ -1,8 +1,10 @@
 import type { PriceSnapshotData } from '@/lib/angelone/quotes'
 import { sectorForSymbol } from '@/lib/portfolio/sectors'
 import type {
+  AlertConfig,
   AlertDirection,
   AlertStatus,
+  ConditionType,
   Conviction,
   Exchange,
   WatchlistItemView,
@@ -10,10 +12,14 @@ import type {
 
 // Shape of a `.lean()` WatchlistItem document (ObjectIds/Dates not yet
 // serialized). Mongoose lean typing is loose, so the route casts to this.
+// `type`/`config` are optional because `.lean()` reads DON'T apply schema
+// defaults, so legacy alerts (no `type`) surface here as undefined → 'price'.
 export type RawWatchlistAlert = {
   _id: unknown
-  targetPrice: number
+  type?: ConditionType
+  targetPrice?: number
   direction?: AlertDirection
+  config?: AlertConfig
   status?: AlertStatus
   lastTriggeredAt?: Date | null
   lastTriggeredPrice?: number | null
@@ -74,8 +80,10 @@ export function enrichWatchlistItems(
       conviction: i.conviction ?? 'watching',
       alerts: alerts.map((a) => ({
         _id: String(a._id),
-        targetPrice: a.targetPrice,
+        type: a.type ?? 'price',
+        targetPrice: typeof a.targetPrice === 'number' ? a.targetPrice : null,
         direction: a.direction ?? 'below',
+        config: a.config ?? {},
         status: a.status ?? 'armed',
         lastTriggeredAt: a.lastTriggeredAt
           ? new Date(a.lastTriggeredAt).toISOString()
