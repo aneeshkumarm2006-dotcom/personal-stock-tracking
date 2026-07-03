@@ -145,6 +145,34 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCommon, search, groups, detailDataKey])
 
+  // Symbols that are open (live or waiting) in 2+ distinct groups. Computed
+  // independently of the Common-stocks panel so the combined view (Today +
+  // Common) can intersect today's entries against it. Only needed when both
+  // filters are on.
+  const commonSymbols = useMemo<Set<string>>(() => {
+    if (!showToday || !showCommon) return new Set()
+    const bySymbol = new Map<string, Set<string>>()
+    detailQueries.forEach((q, i) => {
+      const entries = q.data?.stats.entries
+      if (!entries) return
+      const groupName = groups[i]?.name ?? 'Unknown group'
+      for (const entry of entries) {
+        if (!OPEN_STATUSES.has(entry.status)) continue
+        if (!entry.instrumentToken && !entry.instrumentSymbol) continue
+        const symbol = entry.instrumentSymbol || entry.instrumentToken
+        const groupsForSymbol = bySymbol.get(symbol) ?? new Set<string>()
+        groupsForSymbol.add(groupName)
+        bySymbol.set(symbol, groupsForSymbol)
+      }
+    })
+    const result = new Set<string>()
+    bySymbol.forEach((groupNames, symbol) => {
+      if (groupNames.size >= 2) result.add(symbol)
+    })
+    return result
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showToday, showCommon, groups, detailDataKey])
+
   // Every entry created today (IST), across all groups, newest first. "Today"
   // is the stock's create day, matching the "Entry date" shown in the tables.
   const todaysEntries = useMemo<CommonOccurrence[]>(() => {
@@ -171,6 +199,18 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showToday, search, groups, detailDataKey])
 
+  // Both filters on: today's entries that are also common across groups. Reuses
+  // the already-search-filtered today rows and keeps only common symbols.
+  const combinedRows = useMemo<CommonOccurrence[]>(() => {
+    if (!showToday || !showCommon || commonSymbols.size === 0) return []
+    return todaysEntries.filter((o) => {
+      const symbol = o.entry.instrumentSymbol || o.entry.instrumentToken
+      return commonSymbols.has(symbol)
+    })
+  }, [showToday, showCommon, commonSymbols, todaysEntries])
+
+  const showCombined = showToday && showCommon
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -189,19 +229,23 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={
-                  showToday
-                    ? 'Search today’s entries'
-                    : showCommon
-                      ? 'Search common stocks'
-                      : 'Search groups by name'
+                  showCombined
+                    ? 'Search today’s common stocks'
+                    : showToday
+                      ? 'Search today’s entries'
+                      : showCommon
+                        ? 'Search common stocks'
+                        : 'Search groups by name'
                 }
                 className="pl-8"
                 aria-label={
-                  showToday
-                    ? 'Search today’s entries'
-                    : showCommon
-                      ? 'Search common stocks'
-                      : 'Search groups by name'
+                  showCombined
+                    ? 'Search today’s common stocks'
+                    : showToday
+                      ? 'Search today’s entries'
+                      : showCommon
+                        ? 'Search common stocks'
+                        : 'Search groups by name'
                 }
               />
             </div>
@@ -209,13 +253,7 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
           <Button
             variant={showToday ? 'default' : 'outline'}
             aria-pressed={showToday}
-            onClick={() =>
-              setShowToday((v) => {
-                const next = !v
-                if (next) setShowCommon(false)
-                return next
-              })
-            }
+            onClick={() => setShowToday((v) => !v)}
           >
             <CalendarClockIcon className="size-4" />
             Today
@@ -224,13 +262,7 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
             <Button
               variant={showCommon ? 'default' : 'outline'}
               aria-pressed={showCommon}
-              onClick={() =>
-                setShowCommon((v) => {
-                  const next = !v
-                  if (next) setShowToday(false)
-                  return next
-                })
-              }
+              onClick={() => setShowCommon((v) => !v)}
             >
               <LayersIcon className="size-4" />
               Common stocks
@@ -239,7 +271,15 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
         </div>
       </div>
 
-      {showToday ? (
+      {showCombined ? (
+        <TodaysEntriesPanel
+          loading={detailsLoading}
+          rows={combinedRows}
+          title="Today’s common stocks"
+          description={`Stocks you added today that are also open in two or more groups (${combinedRows.length}).`}
+          emptyDescription="No stocks added today are shared across multiple groups yet."
+        />
+      ) : showToday ? (
         <TodaysEntriesPanel loading={detailsLoading} rows={todaysEntries} />
       ) : showCommon ? (
         <CommonStocksPanel loading={detailsLoading} stocks={commonStocks} />
@@ -260,9 +300,15 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
 function TodaysEntriesPanel({
   loading,
   rows,
+  title = 'Today’s entries',
+  description,
+  emptyDescription = 'No entries created today yet.',
 }: {
   loading: boolean
   rows: CommonOccurrence[]
+  title?: string
+  description?: string
+  emptyDescription?: string
 }) {
   if (loading) {
     return (
@@ -276,19 +322,16 @@ function TodaysEntriesPanel({
 
   if (rows.length === 0) {
     return (
-      <EmptyState
-        className="min-h-24 py-6"
-        description="No entries created today yet."
-      />
+      <EmptyState className="min-h-24 py-6" description={emptyDescription} />
     )
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Today’s entries</CardTitle>
+        <CardTitle>{title}</CardTitle>
         <CardDescription>
-          Stocks you added to any group today ({rows.length}).
+          {description ?? `Stocks you added to any group today (${rows.length}).`}
         </CardDescription>
       </CardHeader>
       <CardContent>
