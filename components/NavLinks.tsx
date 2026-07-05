@@ -9,6 +9,7 @@ export const links = [
   { href: '/watchlist', label: 'Watchlist' },
   { href: '/strategy', label: 'Strategy' },
   { href: '/research', label: 'Research' },
+  { href: '/scanner', label: 'Scanner' },
 ] as const
 
 export function NavLinks() {
