@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { CalendarClockIcon, LayersIcon, SearchIcon } from 'lucide-react'
 import { useQueries } from '@tanstack/react-query'
 
@@ -27,6 +27,7 @@ import {
 import {
   formatCurrency,
   formatInt,
+  formatIstDate,
   formatIstDateTime,
   istDayKey,
 } from '@/lib/format'
@@ -77,7 +78,15 @@ type CommonStock = { symbol: string; occurrences: CommonOccurrence[] }
 export function StrategyGroupList({ groups }: StrategyGroupListProps) {
   const [search, setSearch] = useState('')
   const [showCommon, setShowCommon] = useState(false)
-  const [showToday, setShowToday] = useState(false)
+  // The date panel and which IST calendar day it's filtered to. Defaults to
+  // today; the button lets you retarget it to any day via a calendar picker.
+  const [showDate, setShowDate] = useState(false)
+  const [selectedDay, setSelectedDay] = useState<string>(() => istDayKey(new Date()))
+
+  // The hidden native date input, opened on a double-click of the day button,
+  // plus a debounce timer that lets us tell a single click from a double one.
+  const dateInputRef = useRef<HTMLInputElement>(null)
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -86,11 +95,11 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
   }, [groups, search])
 
   // Both cross-group panels need every group's entries loaded.
-  const needDetails = showCommon || showToday
+  const needDetails = showCommon || showDate
 
   // Fetch every active group's detail so we can spot stocks across groups.
   // Same query keys as GroupCard, so the cache is shared. Only fires once a
-  // cross-group view (Common stocks / Today) is opened.
+  // cross-group view (Common stocks / day panel) is opened.
   const detailQueries = useQueries({
     queries: groups.map((g) => ({
       queryKey: ['strategyGroup', g._id],
@@ -145,11 +154,11 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCommon, search, groups, detailDataKey])
 
-  // Every entry created today (IST), across all groups, newest first. "Today"
-  // is the stock's create day, matching the "Entry date" shown in the tables.
-  const todaysEntries = useMemo<CommonOccurrence[]>(() => {
-    if (!showToday) return []
-    const todayKey = istDayKey(new Date())
+  // Every entry created on the selected IST day, across all groups, newest
+  // first. The day is the stock's create day, matching the "Entry date" shown
+  // in the tables.
+  const dayEntries = useMemo<CommonOccurrence[]>(() => {
+    if (!showDate) return []
     const q = search.trim().toLowerCase()
     const rows: CommonOccurrence[] = []
     detailQueries.forEach((query, i) => {
@@ -157,7 +166,7 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
       if (!entries) return
       const groupName = groups[i]?.name ?? 'Unknown group'
       for (const entry of entries) {
-        if (istDayKey(entry.createdAt) !== todayKey) continue
+        if (istDayKey(entry.createdAt) !== selectedDay) continue
         if (q) {
           const symbol = (entry.instrumentSymbol || entry.instrumentToken).toLowerCase()
           if (!symbol.includes(q)) continue
@@ -169,17 +178,17 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
       o.entry.createdAt ? new Date(o.entry.createdAt).getTime() : 0
     return rows.sort((a, b) => entryTime(b) - entryTime(a))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showToday, search, groups, detailDataKey])
+  }, [showDate, search, groups, detailDataKey, selectedDay])
 
-  // Both filters on: the intersection. Take today's entries and keep only
-  // symbols entered in 2+ distinct groups *today* — a stock is "common" here
-  // only if today's own entries span multiple groups, not because it happens
-  // to be open in another group from an earlier day. Grouped by symbol like the
-  // Common stocks panel, so every shown symbol has 2+ rows.
+  // Both filters on: the intersection. Take the selected day's entries and keep
+  // only symbols entered in 2+ distinct groups *that day* — a stock is "common"
+  // here only if the day's own entries span multiple groups, not because it
+  // happens to be open in another group from an earlier day. Grouped by symbol
+  // like the Common stocks panel, so every shown symbol has 2+ rows.
   const combinedStocks = useMemo<CommonStock[]>(() => {
-    if (!showToday || !showCommon) return []
+    if (!showDate || !showCommon) return []
     const bySymbol = new Map<string, CommonOccurrence[]>()
-    for (const o of todaysEntries) {
+    for (const o of dayEntries) {
       const symbol = o.entry.instrumentSymbol || o.entry.instrumentToken
       if (!symbol) continue
       const list = bySymbol.get(symbol) ?? []
@@ -193,25 +202,81 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
         symbol,
         occurrences: [...occurrences].sort((a, b) => entryTime(b) - entryTime(a)),
       }))
-      // Common = entered in two or more distinct groups today.
+      // Common = entered in two or more distinct groups on the selected day.
       .filter((s) => new Set(s.occurrences.map((o) => o.groupName)).size >= 2)
       .sort((a, b) => entryTime(b.occurrences[0]) - entryTime(a.occurrences[0]))
-  }, [showToday, showCommon, todaysEntries])
+  }, [showDate, showCommon, dayEntries])
 
-  const showCombined = showToday && showCommon
+  const showCombined = showDate && showCommon
   const combinedCount = combinedStocks.reduce(
     (n, s) => n + s.occurrences.length,
     0,
   )
+
+  // Copy helpers shared by the day button, panels, and search box. `dayNoun`
+  // slots into sentences ("added … today" / "added … on 5 Jul 2026").
+  const todayKey = istDayKey(new Date())
+  const isToday = selectedDay === todayKey
+  const dayNoun = isToday ? 'today' : `on ${formatIstDate(selectedDay)}`
+  const searchLabel = showCombined
+    ? isToday
+      ? 'Search today’s common stocks'
+      : `Search common stocks ${dayNoun}`
+    : showDate
+      ? isToday
+        ? 'Search today’s entries'
+        : `Search entries ${dayNoun}`
+      : showCommon
+        ? 'Search common stocks'
+        : 'Search groups by name'
+
+  // Single click selects today (toggling the panel off if it's already on
+  // today); a double click opens the calendar instead. A short timer holds the
+  // single-click action so a double click can cancel it.
+  const handleDayClick = () => {
+    if (clickTimerRef.current) return
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null
+      const today = istDayKey(new Date())
+      if (showDate && selectedDay === today) {
+        setShowDate(false)
+      } else {
+        setSelectedDay(today)
+        setShowDate(true)
+      }
+    }, 220)
+  }
+
+  const handleDayDoubleClick = () => {
+    // Cancel the pending single-click action so it doesn't also fire.
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+    }
+    const input = dateInputRef.current
+    if (!input) return
+    // showPicker() is the modern way to pop the native calendar, but it can
+    // throw (or be missing) in some browsers — fall back to focus + click.
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker()
+        return
+      } catch {
+        // fall through to the focus/click fallback
+      }
+    }
+    input.focus()
+    input.click()
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <StrategyLivePrices />
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-          {/* The search box sifts groups, common stocks, or today's entries —
+          {/* The search box sifts groups, common stocks, or the day's entries —
               whichever view is active. Hidden for a single ungrouped list. */}
-          {(groups.length > 1 || showToday) && (
+          {(groups.length > 1 || showDate) && (
             <div className="relative w-full sm:w-64">
               <SearchIcon
                 className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
@@ -221,36 +286,41 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={
-                  showCombined
-                    ? 'Search today’s common stocks'
-                    : showToday
-                      ? 'Search today’s entries'
-                      : showCommon
-                        ? 'Search common stocks'
-                        : 'Search groups by name'
-                }
+                placeholder={searchLabel}
                 className="pl-8"
-                aria-label={
-                  showCombined
-                    ? 'Search today’s common stocks'
-                    : showToday
-                      ? 'Search today’s entries'
-                      : showCommon
-                        ? 'Search common stocks'
-                        : 'Search groups by name'
-                }
+                aria-label={searchLabel}
               />
             </div>
           )}
-          <Button
-            variant={showToday ? 'default' : 'outline'}
-            aria-pressed={showToday}
-            onClick={() => setShowToday((v) => !v)}
-          >
-            <CalendarClockIcon className="size-4" />
-            Today
-          </Button>
+          {/* Click for today, double-click to pick any date. The native date
+              input is hidden but anchored to this button for the picker. */}
+          <div className="relative">
+            <Button
+              variant={showDate ? 'default' : 'outline'}
+              aria-pressed={showDate}
+              title="Click for today, double-click to pick a date"
+              onClick={handleDayClick}
+              onDoubleClick={handleDayDoubleClick}
+            >
+              <CalendarClockIcon className="size-4" />
+              {isToday ? 'Today' : formatIstDate(selectedDay)}
+            </Button>
+            <input
+              ref={dateInputRef}
+              type="date"
+              value={selectedDay}
+              max={todayKey}
+              tabIndex={-1}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 size-0 opacity-0"
+              onChange={(e) => {
+                if (e.target.value) {
+                  setSelectedDay(e.target.value)
+                  setShowDate(true)
+                }
+              }}
+            />
+          </div>
           {groups.length > 1 && (
             <Button
               variant={showCommon ? 'default' : 'outline'}
@@ -268,12 +338,18 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
         <CommonStocksPanel
           loading={detailsLoading}
           stocks={combinedStocks}
-          title="Today’s common stocks"
-          description={`Stocks you added to two or more groups today (${combinedCount}).`}
-          emptyDescription="No stocks were added to multiple groups today yet."
+          title={isToday ? 'Today’s common stocks' : `Common stocks ${dayNoun}`}
+          description={`Stocks you added to two or more groups ${dayNoun} (${combinedCount}).`}
+          emptyDescription={`No stocks were added to multiple groups ${dayNoun} yet.`}
         />
-      ) : showToday ? (
-        <TodaysEntriesPanel loading={detailsLoading} rows={todaysEntries} />
+      ) : showDate ? (
+        <DayEntriesPanel
+          loading={detailsLoading}
+          rows={dayEntries}
+          isToday={isToday}
+          dayNoun={dayNoun}
+          selectedDay={selectedDay}
+        />
       ) : showCommon ? (
         <CommonStocksPanel loading={detailsLoading} stocks={commonStocks} />
       ) : filtered.length === 0 ? (
@@ -290,12 +366,18 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
   )
 }
 
-function TodaysEntriesPanel({
+function DayEntriesPanel({
   loading,
   rows,
+  isToday,
+  dayNoun,
+  selectedDay,
 }: {
   loading: boolean
   rows: CommonOccurrence[]
+  isToday: boolean
+  dayNoun: string
+  selectedDay: string
 }) {
   if (loading) {
     return (
@@ -311,7 +393,7 @@ function TodaysEntriesPanel({
     return (
       <EmptyState
         className="min-h-24 py-6"
-        description="No entries created today yet."
+        description={`No entries created ${dayNoun} yet.`}
       />
     )
   }
@@ -319,9 +401,11 @@ function TodaysEntriesPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Today’s entries</CardTitle>
+        <CardTitle>
+          {isToday ? 'Today’s entries' : `Entries on ${formatIstDate(selectedDay)}`}
+        </CardTitle>
         <CardDescription>
-          Stocks you added to any group today ({rows.length}).
+          Stocks you added to any group {dayNoun} ({rows.length}).
         </CardDescription>
       </CardHeader>
       <CardContent>
