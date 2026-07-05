@@ -52,6 +52,23 @@ function toTime(value: Date | string): number {
   return value instanceof Date ? value.getTime() : new Date(value).getTime()
 }
 
+// Orders the ledger for replay: by date ascending, then BUY before SELL on ties.
+// The tie-break matters because dates are commonly stored at midnight (no
+// intraday time), so a same-day BUY and SELL collide on timestamp. This is a
+// long-only cash-equity ledger — you cannot sell before you buy on the same day
+// — so a same-date BUY must always be replayed first. Without this, a same-day
+// round trip could sort SELL-first, match nothing, and leave the position
+// wrongly open (netQty > 0) instead of closed.
+function compareForReplay(
+  a: { type: 'BUY' | 'SELL'; date: Date | string },
+  b: { type: 'BUY' | 'SELL'; date: Date | string },
+): number {
+  const byDate = toTime(a.date) - toTime(b.date)
+  if (byDate !== 0) return byDate
+  const rank = (t: 'BUY' | 'SELL') => (t === 'BUY' ? 0 : 1)
+  return rank(a.type) - rank(b.type)
+}
+
 type Lot = {
   qty: number
   price: number
@@ -66,10 +83,10 @@ export type LedgerCheckTx = {
 
 // True when, replaying the ledger in date order, sold quantity ever exceeds
 // bought quantity (i.e. an oversell / short position, which this cash-equity
-// ledger does not support). Ties on date keep input order (stable sort), so
-// callers should append the candidate transaction after existing ones.
+// ledger does not support). Ties on date replay BUY before SELL (see
+// compareForReplay), so a same-day buy is available to cover a same-day sell.
 export function hasNegativeBalance(transactions: LedgerCheckTx[]): boolean {
-  const ordered = [...transactions].sort((a, b) => toTime(a.date) - toTime(b.date))
+  const ordered = [...transactions].sort(compareForReplay)
   let balance = 0
   for (const tx of ordered) {
     balance += tx.type === 'BUY' ? tx.quantity : -tx.quantity
@@ -104,7 +121,7 @@ export function computeHoldings(transactions: TransactionForHoldings[]): Holding
   const results: HoldingData[] = []
 
   for (const [token, txs] of byToken) {
-    const ordered = [...txs].sort((a, b) => toTime(a.date) - toTime(b.date))
+    const ordered = [...txs].sort(compareForReplay)
     const lots: Lot[] = []
     let realizedPnL = 0
     let symbol = ''

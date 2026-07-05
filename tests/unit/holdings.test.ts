@@ -106,6 +106,19 @@ describe('computeHoldings', () => {
     expect(h.realizedPnL).toBe(200)
   })
 
+  it('same-day BUY then full SELL closes the position regardless of input order', () => {
+    // Dates stored at midnight collide on timestamp, so the SELL can arrive
+    // before the BUY in the DB feed. Replay must still put BUY first and net to
+    // zero, otherwise the sold-out position stays wrongly open (netQty = 1).
+    const result = computeHoldings([
+      tx({ type: 'SELL', quantity: 1, price: 1569.5, date: '2026-07-01' }),
+      tx({ type: 'BUY', quantity: 1, price: 1738, date: '2026-07-01', charges: { total: 7.89 } }),
+    ])
+    const h = result[0]!
+    expect(h.netQty).toBe(0)
+    expect(h.isClosed).toBe(true)
+  })
+
   it('groups transactions per instrument token', () => {
     const result = computeHoldings([
       tx({ instrumentToken: '1', instrumentSymbol: 'A', type: 'BUY', quantity: 5, price: 10, date: '2024-01-01' }),
