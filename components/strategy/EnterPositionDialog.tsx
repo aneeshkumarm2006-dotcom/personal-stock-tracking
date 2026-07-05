@@ -139,8 +139,10 @@ export function EnterPositionDialog({ entry, groupId, onClose }: EnterPositionDi
 
   // SL / TP boxes accept a percentage (e.g. "10%") off the entry price. SL sits
   // below entry; targets sit above. Copied from AddEntryDialog / EditEntryDialog.
+  // "$", "^" and "&" sit next to "%" on the keyboard, so any of them is treated
+  // as "%" — a fat-fingered "10^" resolves the same as "10%".
   const resolvePriceOrPercent = (field: PriceField, direction: 'up' | 'down', raw: string) => {
-    const match = /^(\d*\.?\d+)\s*%$/.exec(raw.trim())
+    const match = /^(\d*\.?\d+)\s*[%^&$]$/.exec(raw.trim())
     if (!match) return
     const pct = Number(match[1])
     const base = num(form.getValues('entryPrice'))
@@ -155,7 +157,7 @@ export function EnterPositionDialog({ entry, groupId, onClose }: EnterPositionDi
   const percentField = (field: PriceField, direction: 'up' | 'down') => {
     const reg = form.register(field)
     const maybeResolve = (value: string) => {
-      if (value.trim().endsWith('%')) resolvePriceOrPercent(field, direction, value)
+      if (/[%^&$]$/.test(value.trim())) resolvePriceOrPercent(field, direction, value)
     }
     return {
       ...reg,
