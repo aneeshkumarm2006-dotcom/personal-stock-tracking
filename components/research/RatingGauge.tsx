@@ -1,6 +1,6 @@
 'use client'
 
-import { useId } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { Signal } from '@/lib/research/technicalRating'
 
@@ -79,8 +79,78 @@ export function RatingGauge({
 }: RatingGaugeProps) {
   const gradientId = useId()
   const hasData = score !== null && signal !== null
-  const angle = hasData ? scoreToAngle(score) : 90
-  const [nx, ny] = polar(angle, NEEDLE_LEN)
+
+  // The angle the needle should ultimately settle on: the raw target derived
+  // from the score, or straight up (90°) when we have no data. Nothing the eye
+  // follows is drawn from this directly — instead `displayAngle` below eases
+  // toward it so a timeframe switch sweeps rather than snaps.
+  const targetAngle = hasData ? scoreToAngle(score) : 90
+
+  // The animated angle that chases `targetAngle`. It starts at the neutral
+  // centre so the first mount plays a TradingView-style intro sweep up to the
+  // score. Everything geometric (needle endpoint, fill arc, grey remainder) is
+  // recomputed from this each render, keeping them in perfect lockstep.
+  const [displayAngle, setDisplayAngle] = useState(90)
+
+  // The in-flight rAF handle, plus a mirror of the latest displayed angle so a
+  // fresh tween can pick up from wherever the needle currently sits without
+  // re-subscribing the effect to `displayAngle` (which changes every frame).
+  const frameRef = useRef<number | null>(null)
+  const displayRef = useRef(90)
+
+  useEffect(() => {
+    // Cancel any tween still running so a rapid timeframe switch restarts from
+    // the needle's current position rather than fighting the previous sweep.
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current)
+      frameRef.current = null
+    }
+
+    const from = displayRef.current
+    const to = targetAngle
+
+    // Respect the user's reduced-motion preference — and skip the no-op case —
+    // by jumping straight to the target with no tween. Guarded for SSR.
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    if (prefersReducedMotion || from === to) {
+      displayRef.current = to
+      setDisplayAngle(to)
+      return
+    }
+
+    // Ease-out cubic over ~0.7s: quick off the mark, gently decelerating onto
+    // the new reading — the feel of the TradingView gauge settling.
+    const DURATION_MS = 700
+    const startedAt = performance.now()
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - startedAt) / DURATION_MS)
+      const eased = 1 - Math.pow(1 - t, 3)
+      const current = from + (to - from) * eased
+      displayRef.current = current
+      setDisplayAngle(current)
+      frameRef.current = t < 1 ? requestAnimationFrame(tick) : null
+    }
+
+    frameRef.current = requestAnimationFrame(tick)
+
+    // Cancel on unmount (and before the next tween) so no frame — and no state
+    // update — fires after teardown.
+    return () => {
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current)
+        frameRef.current = null
+      }
+    }
+  }, [targetAngle])
+
+  // Needle endpoint and both arc paths derive from the *animated* angle so they
+  // sweep together; the discrete bits (signal word, colour, rim highlight,
+  // counts) still snap to the target props below.
+  const [nx, ny] = polar(displayAngle, NEEDLE_LEN)
   const color = signalColor(signal)
   const activeKey = hasData ? signal!.toLowerCase().replace(/\s+/g, '') : null
 
@@ -117,7 +187,7 @@ export function RatingGauge({
 
         {/* Grey remainder beyond the needle (or the whole track when no data). */}
         <path
-          d={arcPath(hasData ? angle : 180, 0)}
+          d={arcPath(hasData ? displayAngle : 180, 0)}
           fill="none"
           stroke={TRACK}
           strokeWidth={STROKE}
@@ -127,7 +197,7 @@ export function RatingGauge({
         {/* Coloured fill from Strong Sell up to the needle. */}
         {hasData && (
           <path
-            d={arcPath(180, angle)}
+            d={arcPath(180, displayAngle)}
             fill="none"
             stroke={`url(#${gradientId})`}
             strokeWidth={STROKE}
