@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScannerStatCards } from '@/components/scanner/ScannerStatCards'
 import { ScannerEquityChart } from '@/components/scanner/ScannerEquityChart'
 import { PerStrategyTable } from '@/components/scanner/PerStrategyTable'
+import { PerStockTable } from '@/components/scanner/PerStockTable'
 import type { ScannerRun } from '@/lib/scanner/types'
 
 export const dynamic = 'force-dynamic'
@@ -77,7 +78,7 @@ export default async function ScannerOverviewPage() {
     )
   }
 
-  const { summary, daily, recentRuns } = data
+  const { summary, daily, recentRuns, byStock } = data
   const byStrategy = summary.byStrategy ?? {}
 
   return (
@@ -112,6 +113,14 @@ export default async function ScannerOverviewPage() {
           hint="Closed and open trade stats per strategy"
         />
         <PerStrategyTable byStrategy={byStrategy} />
+      </section>
+
+      <section className="space-y-3">
+        <SectionHeader
+          title="Stocks"
+          hint="Per-stock stats — active (currently held) or closed"
+        />
+        <PerStockTable byStock={byStock} />
       </section>
 
       <section className="space-y-3">

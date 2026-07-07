@@ -25,6 +25,7 @@ import type {
   DayView,
   DaySignal,
   ScannerPosition,
+  StockBlock,
   SignalView,
   ScannerSettings,
   HealthData,
@@ -36,19 +37,101 @@ type Raw = Record<string, any>
 
 export async function getOverview(): Promise<OverviewData> {
   await connectDB()
-  const [summaryDoc, dailyDocs, runDocs, openPositionsCount] = await Promise.all([
-    ScannerStatsModel.findById('summary').lean<Raw>().exec(),
-    ScannerDailyStatModel.find({}).sort({ date: 1 }).lean<Raw[]>().exec(),
-    ScannerRunModel.find({}).sort({ date: -1 }).limit(10).lean<Raw[]>().exec(),
-    ScannerPositionModel.countDocuments({ status: 'OPEN' }).exec(),
-  ])
+  const [summaryDoc, dailyDocs, runDocs, openPositionsCount, positionDocs] =
+    await Promise.all([
+      ScannerStatsModel.findById('summary').lean<Raw>().exec(),
+      ScannerDailyStatModel.find({}).sort({ date: 1 }).lean<Raw[]>().exec(),
+      ScannerRunModel.find({}).sort({ date: -1 }).limit(10).lean<Raw[]>().exec(),
+      ScannerPositionModel.countDocuments({ status: 'OPEN' }).exec(),
+      ScannerPositionModel.find({}).lean<Raw[]>().exec(),
+    ])
 
   return {
     summary: summaryDoc ? serializeSummary(summaryDoc) : null,
     daily: (dailyDocs ?? []).map(serializeDailyStat),
     recentRuns: (runDocs ?? []).map(serializeRun),
     openPositionsCount: openPositionsCount ?? 0,
+    byStock: aggregateByStock((positionDocs ?? []).map(serializePosition)),
   }
+}
+
+// Roll positions up per symbol into the same TradeBlock shape the Python publisher
+// emits per strategy, plus an `active` flag (currently holds an OPEN/PENDING
+// position) and the strategies that have traded the symbol. winRate is a fraction
+// (0..1); avgR / profitFactor are null when there are no closed trades / no losses.
+function aggregateByStock(positions: ScannerPosition[]): StockBlock[] {
+  const bySymbol = new Map<string, ScannerPosition[]>()
+  for (const p of positions) {
+    if (!p.symbol) continue
+    const list = bySymbol.get(p.symbol)
+    if (list) list.push(p)
+    else bySymbol.set(p.symbol, [p])
+  }
+
+  const rows: StockBlock[] = []
+  for (const [symbol, list] of bySymbol) {
+    const strategies = Array.from(
+      new Set(list.map((p) => p.strategy).filter(Boolean) as string[]),
+    ).sort()
+
+    let closedTrades = 0
+    let openTrades = 0
+    let wins = 0
+    let rSum = 0
+    let rCount = 0
+    let grossWin = 0
+    let grossLoss = 0
+    let totalRealizedNet = 0
+    let totalUnrealized = 0
+    let active = false
+
+    for (const p of list) {
+      if (p.status === 'CLOSED') {
+        closedTrades += 1
+        const net = p.netPnl ?? 0
+        totalRealizedNet += net
+        if (net > 0) {
+          wins += 1
+          grossWin += net
+        } else if (net < 0) {
+          grossLoss += -net
+        }
+        if (typeof p.rMultiple === 'number' && !Number.isNaN(p.rMultiple)) {
+          rSum += p.rMultiple
+          rCount += 1
+        }
+      } else if (p.status === 'OPEN' || p.status === 'PENDING_ENTRY') {
+        openTrades += 1
+        active = true
+        totalUnrealized += p.lastMark?.unrealizedPnl ?? 0
+      }
+    }
+
+    rows.push({
+      symbol,
+      strategies,
+      active,
+      totalTrades: closedTrades + openTrades,
+      closedTrades,
+      openTrades,
+      winRate: closedTrades > 0 ? wins / closedTrades : null,
+      avgR: rCount > 0 ? rSum / rCount : null,
+      profitFactor: grossLoss > 0 ? grossWin / grossLoss : null,
+      totalRealizedNet,
+      totalUnrealized,
+    })
+  }
+
+  // Active stocks first, then by absolute realized P&L, then alphabetically.
+  rows.sort((a, b) => {
+    if (a.active !== b.active) return a.active ? -1 : 1
+    const ap = Math.abs(a.totalRealizedNet ?? 0)
+    const bp = Math.abs(b.totalRealizedNet ?? 0)
+    if (ap !== bp) return bp - ap
+    return a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0
+  })
+
+  return rows
 }
 
 export async function listDays(): Promise<DayListItem[]> {

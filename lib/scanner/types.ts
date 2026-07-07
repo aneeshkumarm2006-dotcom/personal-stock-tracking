@@ -211,6 +211,16 @@ export type TradeBlock = {
   totalUnrealized?: number
 }
 
+// Per-stock aggregation computed on the fly from positions (Python only publishes
+// byStrategy). `active` is true when the stock currently holds an OPEN/PENDING
+// position; strategies lists every strategy that has traded the symbol.
+export type StockBlock = TradeBlock & {
+  symbol: string
+  strategies: string[]
+  active: boolean
+  totalTrades: number
+}
+
 export type ScannerStatsSummary = {
   id: string
   asOf?: string | null
@@ -251,6 +261,7 @@ export type OverviewData = {
   daily: ScannerDailyStat[]
   recentRuns: ScannerRun[]
   openPositionsCount: number
+  byStock: StockBlock[]
 }
 
 export type HealthData = {
