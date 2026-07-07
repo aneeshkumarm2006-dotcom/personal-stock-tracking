@@ -262,6 +262,7 @@ export type OverviewData = {
   recentRuns: ScannerRun[]
   openPositionsCount: number
   byStock: StockBlock[]
+  positions: ScannerPosition[]
 }
 
 export type HealthData = {

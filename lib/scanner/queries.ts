@@ -46,13 +46,35 @@ export async function getOverview(): Promise<OverviewData> {
       ScannerPositionModel.find({}).lean<Raw[]>().exec(),
     ])
 
+  const positions = (positionDocs ?? []).map(serializePosition)
+
   return {
     summary: summaryDoc ? serializeSummary(summaryDoc) : null,
     daily: (dailyDocs ?? []).map(serializeDailyStat),
     recentRuns: (runDocs ?? []).map(serializeRun),
     openPositionsCount: openPositionsCount ?? 0,
-    byStock: aggregateByStock((positionDocs ?? []).map(serializePosition)),
+    byStock: aggregateByStock(positions),
+    positions: sortPositionsForDisplay(positions),
   }
+}
+
+// OPEN/PENDING first (most recent entry/signal first), then closed/skipped by
+// most recent signal date — mirrors the listPositions ordering.
+function sortPositionsForDisplay(positions: ScannerPosition[]): ScannerPosition[] {
+  const isOpen = (p: ScannerPosition) =>
+    p.status === 'OPEN' || p.status === 'PENDING_ENTRY'
+  const desc = (a: string | null | undefined, b: string | null | undefined) => {
+    const av = a ?? ''
+    const bv = b ?? ''
+    return av < bv ? 1 : av > bv ? -1 : 0
+  }
+  return [...positions].sort((a, b) => {
+    const ao = isOpen(a)
+    const bo = isOpen(b)
+    if (ao !== bo) return ao ? -1 : 1
+    if (ao) return desc(a.entryDate ?? a.signalDate, b.entryDate ?? b.signalDate)
+    return desc(a.exitDate ?? a.signalDate, b.exitDate ?? b.signalDate)
+  })
 }
 
 // Roll positions up per symbol into the same TradeBlock shape the Python publisher

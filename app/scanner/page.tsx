@@ -10,6 +10,7 @@ import { ScannerStatCards } from '@/components/scanner/ScannerStatCards'
 import { ScannerEquityChart } from '@/components/scanner/ScannerEquityChart'
 import { PerStrategyTable } from '@/components/scanner/PerStrategyTable'
 import { PerStockTable } from '@/components/scanner/PerStockTable'
+import { ScannerLevelsTable } from '@/components/scanner/ScannerLevelsTable'
 import type { ScannerRun } from '@/lib/scanner/types'
 
 export const dynamic = 'force-dynamic'
@@ -78,7 +79,7 @@ export default async function ScannerOverviewPage() {
     )
   }
 
-  const { summary, daily, recentRuns, byStock } = data
+  const { summary, daily, recentRuns, byStock, positions } = data
   const byStrategy = summary.byStrategy ?? {}
 
   return (
@@ -121,6 +122,14 @@ export default async function ScannerOverviewPage() {
           hint="Per-stock stats — active (currently held) or closed"
         />
         <PerStockTable byStock={byStock} />
+      </section>
+
+      <section className="space-y-3">
+        <SectionHeader
+          title="Trade levels"
+          hint="Entry, stop, targets and live P&L per position"
+        />
+        <ScannerLevelsTable positions={positions} />
       </section>
 
       <section className="space-y-3">
