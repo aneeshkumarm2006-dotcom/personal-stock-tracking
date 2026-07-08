@@ -2,10 +2,8 @@
 
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { BriefcaseIcon, PencilIcon, Trash2Icon, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -24,12 +22,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatCurrency, formatInt, pnlColorClass } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import type { EntryStats } from '@/lib/strategy/group'
+import { resolveColumns, type CellCtx } from './entryColumns'
+import { useStrategyColumns } from './StrategyColumnsContext'
 import { ManualCloseDialog } from './ManualCloseDialog'
 import { EditEntryDialog } from './EditEntryDialog'
 import { EnterPositionDialog } from './EnterPositionDialog'
-import { StrategyEntryTags } from './StrategyEntryTags'
+
+// Re-exported so StrategyGroupList's `import { statusDisplay } from './EntriesTable'`
+// keeps working after the move into the column registry.
+export { statusDisplay, type StatusDisplay } from './entryColumns'
 
 export type EntriesTableProps = {
   groupId: string
@@ -37,85 +40,6 @@ export type EntriesTableProps = {
   allowClose?: boolean
   // Free capital in the group, used to validate edits to pending entries.
   capitalFree?: number
-}
-
-export type StatusDisplay = {
-  label: string
-  variant: 'default' | 'secondary' | 'destructive' | 'outline'
-  className?: string
-}
-
-function runningPct(entry: EntryStats): { label: string; className: string } {
-  const pct = entry.capitalUsed > 0 ? (entry.totalPnL / entry.capitalUsed) * 100 : 0
-  const sign = pct >= 0 ? '+' : ''
-  return {
-    label: `${sign}${pct.toFixed(2)}%`,
-    className: pct >= 0 ? 'text-gain' : 'text-loss',
-  }
-}
-
-export function statusDisplay(entry: EntryStats): StatusDisplay {
-  switch (entry.status) {
-    case 'pending':
-      return {
-        label:
-          entry.triggerType === 'stop'
-            ? 'Waiting · breakout ↑'
-            : 'Waiting · dip ↓',
-        variant: 'outline',
-      }
-    case 'active': {
-      if (entry.currentPrice === null) {
-        return { label: 'Running', variant: 'secondary' }
-      }
-      const p = runningPct(entry)
-      return { label: `Running ${p.label}`, variant: 'outline', className: p.className }
-    }
-    case 'partial': {
-      const p = runningPct(entry)
-      return {
-        label: `Scaled out · ${p.label}`,
-        variant: 'outline',
-        className: 'bg-gain/10 text-gain border-transparent',
-      }
-    }
-    case 'trailing': {
-      const p = runningPct(entry)
-      return {
-        label: `Trailing · ${p.label}`,
-        variant: 'outline',
-        className: 'bg-gain/10 text-gain border-transparent',
-      }
-    }
-    case 'tp_hit':
-      return {
-        label: 'TP hit',
-        variant: 'outline',
-        className: 'bg-gain/10 text-gain border-transparent',
-      }
-    case 'trail_hit':
-      return {
-        label: 'Trail exit',
-        variant: 'outline',
-        className: 'bg-gain/10 text-gain border-transparent',
-      }
-    case 'sl_hit':
-      return {
-        label: 'SL hit',
-        variant: 'outline',
-        className: 'bg-loss/10 text-loss border-transparent',
-      }
-    case 'closed_manual':
-      return { label: 'Closed', variant: 'outline' }
-    case 'expired':
-      return {
-        label: 'Expired · never filled',
-        variant: 'outline',
-        className: 'text-muted-foreground',
-      }
-    default:
-      return { label: entry.status, variant: 'outline' }
-  }
 }
 
 export function EntriesTable({
@@ -130,6 +54,7 @@ export function EntriesTable({
   const [entering, setEntering] = useState<EntryStats | null>(null)
   const [deleting, setDeleting] = useState<EntryStats | null>(null)
   const [deletePending, setDeletePending] = useState(false)
+  const { order, hidden } = useStrategyColumns()
 
   async function confirmDelete() {
     if (!deleting?.id) return
@@ -170,167 +95,52 @@ export function EntriesTable({
     )
   }
 
+  const columns = resolveColumns(order, hidden, allowClose)
+  const ctx: CellCtx = {
+    groupId,
+    allowClose,
+    capitalFree,
+    setEntering,
+    setEditing,
+    setClosing,
+    setDeleting,
+  }
+
   return (
     <div className="space-y-2">
       <div className="overflow-hidden rounded-lg border">
         <Table containerClassName="thin-scrollbar">
           <TableHeader>
             <TableRow>
-              <TableHead>Symbol</TableHead>
-              <TableHead className="text-right">Entry</TableHead>
-              <TableHead className="text-right">SL</TableHead>
-              <TableHead className="text-right">TP1</TableHead>
-              <TableHead className="text-right">TP2</TableHead>
-              <TableHead className="text-right">Qty</TableHead>
-              <TableHead className="text-right">Capital</TableHead>
-              <TableHead className="text-right">Risk</TableHead>
-              <TableHead className="text-right">Reward</TableHead>
-              <TableHead className="text-right">R:R</TableHead>
-              <TableHead className="text-right">Current</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">P&L</TableHead>
-              <TableHead className="min-w-[240px]">Tags</TableHead>
-              {allowClose && <TableHead className="text-right">Actions</TableHead>}
+              {columns.map((col) => (
+                <TableHead
+                  key={col.id}
+                  className={cn(col.align === 'right' && 'text-right', col.headClassName)}
+                >
+                  {col.label}
+                </TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {entries.map((e) => {
-              const display = statusDisplay(e)
-              const canClose =
-                e.status === 'pending' ||
-                e.status === 'active' ||
-                e.status === 'partial' ||
-                e.status === 'trailing'
-              // Only entries that haven't filled yet can have their levels edited.
-              const canEdit = e.status === 'pending'
-              // Open entries can be deleted outright; settled ones stay in history.
-              const canDelete = canClose
-              // An assigned, open, not-yet-entered entry can be turned into a real
-              // portfolio position — which also arms its loud SL/TP alert.
-              const canEnter = !!e.instrumentToken && !e.enteredToPortfolio && canClose
-              const stopMoved = e.activeStop !== e.stopLoss
               const key = e.id ?? `${e.instrumentToken}-${e.entryPrice}`
               return (
                 <TableRow key={key}>
-                  <TableCell className="font-medium">
-                    {e.instrumentSymbol || e.instrumentToken || (
-                      <span className="text-muted-foreground font-normal italic">
-                        Unassigned
-                      </span>
-                    )}
-                    {e.enteredToPortfolio && (
-                      <div className="mt-0.5">
-                        <Badge
-                          variant="outline"
-                          className="border-transparent bg-primary/10 text-primary text-[10px]"
-                        >
-                          In portfolio
-                        </Badge>
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">{formatCurrency(e.entryPrice)}</TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(e.activeStop)}
-                    {stopMoved && (
-                      <div className="text-muted-foreground text-[10px] leading-tight">
-                        was {formatCurrency(e.stopLoss)}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">{formatCurrency(e.targetPrice)}</TableCell>
-                  <TableCell className="text-muted-foreground text-right">
-                    {e.target2 !== null ? formatCurrency(e.target2) : '—'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {e.soldQuantity > 0
-                      ? `${formatInt(e.remainingQuantity)} / ${formatInt(e.quantity)}`
-                      : formatInt(e.quantity)}
-                  </TableCell>
-                  <TableCell className="text-right">{formatCurrency(e.capitalUsed)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(e.risk)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(e.reward)}</TableCell>
-                  <TableCell className="text-right">
-                    {e.rr > 0 ? e.rr.toFixed(2) : '—'}
-                  </TableCell>
-                  <TableCell className="text-right">{formatCurrency(e.currentPrice)}</TableCell>
-                  <TableCell>
-                    <Badge variant={display.variant} className={display.className}>
-                      {display.label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className={`text-right ${pnlColorClass(e.totalPnL)}`}>
-                    {e.status === 'pending' || e.status === 'expired'
-                      ? '—'
-                      : formatCurrency(e.totalPnL)}
-                  </TableCell>
-                  <TableCell className="min-w-[240px]">
-                    {e.id ? (
-                      <StrategyEntryTags
-                        entryId={e.id}
-                        groupId={groupId}
-                        instrumentSymbol={e.instrumentSymbol}
-                        tags={e.tags}
-                      />
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    )}
-                  </TableCell>
-                  {allowClose && (
-                    <TableCell className="text-right">
-                      {e.id && (canClose || canEdit || canEnter) ? (
-                        <div className="flex justify-end gap-1.5">
-                          {canEnter && (
-                            <Button
-                              size="icon-xs"
-                              variant="outline"
-                              onClick={() => setEntering(e)}
-                              aria-label="Enter into portfolio"
-                              title="Enter into portfolio"
-                            >
-                              <BriefcaseIcon className="size-3.5" />
-                            </Button>
-                          )}
-                          {canEdit && (
-                            <Button
-                              size="icon-xs"
-                              variant="outline"
-                              onClick={() => setEditing(e)}
-                              aria-label="Edit entry"
-                              title="Edit"
-                            >
-                              <PencilIcon className="size-3.5" />
-                            </Button>
-                          )}
-                          {canClose && (
-                            <Button
-                              size="icon-xs"
-                              variant="outline"
-                              onClick={() => setClosing(e)}
-                              aria-label="Close entry"
-                              title="Close"
-                            >
-                              <XIcon className="size-3.5" />
-                            </Button>
-                          )}
-                          {canDelete && (
-                            <Button
-                              size="icon-xs"
-                              variant="outline"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => setDeleting(e)}
-                              aria-label="Delete entry"
-                              title="Delete"
-                            >
-                              <Trash2Icon className="size-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">—</span>
-                      )}
-                    </TableCell>
-                  )}
+                  {columns.map((col) => {
+                    const extra =
+                      typeof col.cellClassName === 'function'
+                        ? col.cellClassName(e)
+                        : col.cellClassName
+                    return (
+                      <TableCell
+                        key={col.id}
+                        className={cn(col.align === 'right' && 'text-right', extra)}
+                      >
+                        {col.cell(e, ctx)}
+                      </TableCell>
+                    )
+                  })}
                 </TableRow>
               )
             })}

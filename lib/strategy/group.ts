@@ -1,4 +1,5 @@
 import type { PriceSnapshotData } from '@/lib/angelone/quotes'
+import { normalizeSymbol, sectorForSymbol } from '@/lib/portfolio/sectors'
 import {
   currentStop,
   exitMode,
@@ -37,6 +38,9 @@ export type EntryStats = {
   id: string | null
   instrumentToken: string
   instrumentSymbol: string
+  // Derived, never user-entered: the offline sector map, falling back to the
+  // live-resolved SectorCache passed into computeGroupStats. 'Other' when unknown.
+  sector: string
   status: StrategyEntryStatus
   exitMode: ExitMode
   triggerType: TriggerType
@@ -116,6 +120,9 @@ export function computeGroupStats(
   group: GroupForStats,
   entries: EntryForStats[],
   snapshots: PriceSnapshotData[],
+  // Optional live-resolved sectors keyed by NORMALIZED symbol (from SectorCache).
+  // Only consulted when the offline map returns 'Other'.
+  sectorBySymbol?: Map<string, string>,
 ): GroupStats {
   const ltpByToken = new Map<string, number>()
   for (const s of snapshots) {
@@ -154,10 +161,16 @@ export function computeGroupStats(
     realizedTotal += realized
     unrealizedTotal += unrealized
 
+    let sector = sectorForSymbol(e.instrumentSymbol)
+    if (sector === 'Other' && sectorBySymbol && e.instrumentSymbol) {
+      sector = sectorBySymbol.get(normalizeSymbol(e.instrumentSymbol)) ?? 'Other'
+    }
+
     enriched.push({
       id: e._id != null ? String(e._id) : null,
       instrumentToken: e.instrumentToken,
       instrumentSymbol: e.instrumentSymbol ?? '',
+      sector,
       status: e.status,
       exitMode: exitMode(e),
       triggerType: e.triggerType ?? 'limit',

@@ -1,7 +1,12 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
-import { CalendarClockIcon, LayersIcon, SearchIcon } from 'lucide-react'
+import {
+  CalendarClockIcon,
+  LayersIcon,
+  SearchIcon,
+  SlidersHorizontalIcon,
+} from 'lucide-react'
 import { useQueries } from '@tanstack/react-query'
 
 import { Badge } from '@/components/ui/badge'
@@ -35,6 +40,10 @@ import type { EntryStats, GroupStats } from '@/lib/strategy/group'
 import type { StrategyEntryStatus } from '@/lib/strategy/evaluate'
 import { GroupCard } from './GroupCard'
 import { statusDisplay } from './EntriesTable'
+import {
+  StrategyColumnsProvider,
+  useStrategyColumns,
+} from './StrategyColumnsContext'
 import { StrategyLivePrices } from './StrategyLivePrices'
 
 // Stocks that are live or still waiting to fill — the open positions worth
@@ -269,7 +278,10 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
     input.click()
   }
 
+  // One column preference governs every group's table; a "Columns" button in the
+  // toolbar opens the customizer. The provider persists it and hosts the modal.
   return (
+    <StrategyColumnsProvider>
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <StrategyLivePrices />
@@ -331,6 +343,9 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
               Common stocks
             </Button>
           )}
+          {/* Customize the per-group entry tables. Only shown in the group-list
+              view — the Common stocks / day panels have their own fixed columns. */}
+          {!showCommon && !showDate && <ColumnsButton />}
         </div>
       </div>
 
@@ -363,6 +378,19 @@ export function StrategyGroupList({ groups }: StrategyGroupListProps) {
         ))
       )}
     </div>
+    </StrategyColumnsProvider>
+  )
+}
+
+// Toolbar button that opens the column customizer. Split out so it can call
+// useStrategyColumns() from inside the provider.
+function ColumnsButton() {
+  const { openSettings } = useStrategyColumns()
+  return (
+    <Button variant="outline" onClick={openSettings}>
+      <SlidersHorizontalIcon className="size-4" />
+      Columns
+    </Button>
   )
 }
 

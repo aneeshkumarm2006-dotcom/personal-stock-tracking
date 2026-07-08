@@ -1,3 +1,8 @@
+import { GENERATED_SECTOR_MAP } from './sectors.generated'
+
+// Curated overrides for the most-traded names. These win over the generated
+// Nifty-500 map so the labels here (e.g. 'Banking', 'IT Services') stay stable
+// across the watchlist filter and the portfolio "Allocation by sector" pie.
 const SECTOR_MAP: Record<string, string> = {
   RELIANCE: 'Oil & Gas',
   ONGC: 'Oil & Gas',
@@ -134,7 +139,10 @@ const SECTOR_MAP: Record<string, string> = {
   SPICEJET: 'Aviation',
 }
 
-function normalize(symbol: string): string {
+// Canonical key for a symbol: drop the series suffix (-EQ/-BE/…), map '&' to
+// '_', uppercase. Exported so the persistent SectorCache keys by the exact same
+// value sectorForSymbol() looks up.
+export function normalizeSymbol(symbol: string): string {
   return symbol
     .replace(/-(EQ|BE|BZ|SM|ST)$/i, '')
     .replace(/&/g, '_')
@@ -144,5 +152,7 @@ function normalize(symbol: string): string {
 
 export function sectorForSymbol(symbol: string | undefined | null): string {
   if (!symbol) return 'Other'
-  return SECTOR_MAP[normalize(symbol)] ?? 'Other'
+  const key = normalizeSymbol(symbol)
+  // Curated override first, then the generated Nifty-500 map, then unknown.
+  return SECTOR_MAP[key] ?? GENERATED_SECTOR_MAP[key] ?? 'Other'
 }

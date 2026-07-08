@@ -8,6 +8,53 @@ import { StrategyGroup } from '@/lib/db/models/StrategyGroup'
 import { computeGroupStats, type EntryForStats } from '@/lib/strategy/group'
 import { TERMINAL_ENTRY_STATUSES } from '@/lib/strategy/evaluate'
 import { loadSnapshotsForTokens } from '@/lib/prices/snapshots'
+import { normalizeSymbol, sectorForSymbol } from '@/lib/portfolio/sectors'
+import { resolveSectorLive, sectorsForSymbols } from '@/lib/strategy/sector'
+
+// How many not-yet-cached symbols to resolve from the rate-limited provider per
+// request, and how long to wait before returning without them. Anything left
+// unresolved shows 'Other' and is retried on the next 30s refetch; in-flight
+// fetches keep running and populate the cache for next time (self-healing).
+const SECTOR_FETCH_CAP = 5
+const SECTOR_FETCH_BUDGET_MS = 3000
+
+// Resolve sectors for entries the offline maps don't cover: read the persistent
+// cache, then fetch a capped number of genuine misses within a time budget.
+async function resolveSectors(
+  entries: Pick<EntryForStats, 'instrumentSymbol'>[],
+): Promise<Map<string, string>> {
+  const unknown = [
+    ...new Set(
+      entries
+        .map((e) => e.instrumentSymbol?.trim())
+        .filter((s): s is string => !!s && sectorForSymbol(s) === 'Other'),
+    ),
+  ]
+  const cacheMap = await sectorsForSymbols(unknown)
+
+  const toFetch = unknown
+    .filter((s) => !cacheMap.has(normalizeSymbol(s)))
+    .slice(0, SECTOR_FETCH_CAP)
+  if (toFetch.length === 0) return cacheMap
+
+  const settled = await Promise.race([
+    Promise.allSettled(
+      toFetch.map(async (s) => ({
+        key: normalizeSymbol(s),
+        sector: await resolveSectorLive(s),
+      })),
+    ),
+    new Promise<null>((res) => setTimeout(() => res(null), SECTOR_FETCH_BUDGET_MS)),
+  ])
+  if (settled) {
+    for (const r of settled) {
+      if (r.status === 'fulfilled' && r.value.sector !== 'Other') {
+        cacheMap.set(r.value.key, r.value.sector)
+      }
+    }
+  }
+  return cacheMap
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -41,8 +88,11 @@ export async function GET(_request: Request, { params }: RouteContext) {
     .lean()) as unknown as (EntryForStats & { _id: unknown })[]
 
   const tokens = entries.map((e) => e.instrumentToken)
-  const snapshots = await loadSnapshotsForTokens(tokens)
-  const stats = computeGroupStats(group, entries, snapshots)
+  const [snapshots, sectorBySymbol] = await Promise.all([
+    loadSnapshotsForTokens(tokens),
+    resolveSectors(entries),
+  ])
+  const stats = computeGroupStats(group, entries, snapshots, sectorBySymbol)
 
   return NextResponse.json({ group, entries, stats })
 }
