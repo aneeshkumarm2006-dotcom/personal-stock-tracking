@@ -283,3 +283,79 @@ export type PositionsFilter = {
   strategy?: string
   date?: string
 }
+
+// ── Intraday replay (sector-momentum + VWAP ORB) ────────────────────────────
+
+export type IntradayArmStats = {
+  trades: number
+  wins: number
+  winRate: number | null
+  avgR: number | null
+  netPnl: number
+  equity: number
+  grossPnl: number
+  costs: number
+}
+
+export type IntradaySummary = {
+  capital: number
+  byArm: { A: IntradayArmStats; B: IntradayArmStats }
+}
+
+export type IntradaySectorRow = {
+  key: string
+  name: string
+  pct920: number | null
+  pct925: number | null
+}
+
+export type IntradayRun = {
+  date: string
+  status: string
+  noTradeReason?: string | null
+  sector?: string | null
+  direction?: string | null
+  tradeCount?: number
+  dayPnlA?: number | null
+  dayPnlB?: number | null
+  warnings?: string[]
+}
+
+export type IntradayTranche = {
+  time: string
+  price: number
+  qty: number
+  reason: string
+}
+
+export type IntradayTrade = {
+  id: string
+  date: string
+  symbol: string
+  arm: string | null
+  direction: string
+  sector?: string | null
+  status: string
+  rv?: number | null
+  pct925?: number | null
+  trigger?: number | null
+  stop?: number | null
+  entryTime?: string | null
+  entry?: number | null
+  qty?: number | null
+  target?: number | null
+  exitTime?: string | null
+  exitReason?: string | null
+  tranches?: IntradayTranche[]
+  grossPnl?: number | null
+  costs?: number | null
+  netPnl?: number | null
+  rMultiple?: number | null
+  skipReason?: string | null
+}
+
+export type IntradayOverview = {
+  summary: IntradaySummary | null
+  recentRuns: IntradayRun[]
+  recentTrades: IntradayTrade[]
+}

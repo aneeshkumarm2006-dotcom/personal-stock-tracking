@@ -349,3 +349,35 @@ export async function getHealth(): Promise<HealthData> {
     ageHours,
   }
 }
+
+// ── Intraday replay (sector-momentum + VWAP ORB) ────────────────────────────
+
+import {
+  ScannerIntradayRunModel,
+  ScannerIntradayTradeModel,
+  ScannerIntradayStatsModel,
+} from './models'
+import {
+  serializeIntradayRun,
+  serializeIntradayTrade,
+  serializeIntradaySummary,
+} from './serialize'
+import type { IntradayOverview } from './types'
+
+export async function getIntradayOverview(): Promise<IntradayOverview> {
+  await connectDB()
+  const [summaryDoc, runDocs, tradeDocs] = await Promise.all([
+    ScannerIntradayStatsModel.findById('summary').lean<Raw>().exec(),
+    ScannerIntradayRunModel.find({}).sort({ date: -1 }).limit(10).lean<Raw[]>().exec(),
+    ScannerIntradayTradeModel.find({})
+      .sort({ date: -1 })
+      .limit(60)
+      .lean<Raw[]>()
+      .exec(),
+  ])
+  return {
+    summary: summaryDoc ? serializeIntradaySummary(summaryDoc) : null,
+    recentRuns: (runDocs ?? []).map(serializeIntradayRun),
+    recentTrades: (tradeDocs ?? []).map(serializeIntradayTrade),
+  }
+}

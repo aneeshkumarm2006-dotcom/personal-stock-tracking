@@ -250,3 +250,67 @@ export function serializeSettings(raw: Raw): ScannerSettings {
     createdAt: toISO(d.createdAt),
   }
 }
+
+// ── Intraday replay serializers ─────────────────────────────────────────────
+
+import type { IntradayRun, IntradaySummary, IntradayTrade } from './types'
+
+export function serializeIntradayRun(doc: Raw): IntradayRun {
+  return {
+    date: doc.date ?? '',
+    status: doc.status ?? 'unknown',
+    noTradeReason: doc.noTradeReason ?? null,
+    sector: doc.sector ?? null,
+    direction: doc.direction ?? null,
+    tradeCount: typeof doc.tradeCount === 'number' ? doc.tradeCount : 0,
+    dayPnlA: typeof doc.dayPnlA === 'number' ? doc.dayPnlA : null,
+    dayPnlB: typeof doc.dayPnlB === 'number' ? doc.dayPnlB : null,
+    warnings: Array.isArray(doc.warnings) ? doc.warnings.map(String) : [],
+  }
+}
+
+export function serializeIntradayTrade(doc: Raw): IntradayTrade {
+  return {
+    id: toId(doc._id),
+    date: doc.date ?? '',
+    symbol: doc.symbol ?? '',
+    arm: doc.arm ?? null,
+    direction: doc.direction ?? '',
+    sector: doc.sector ?? null,
+    status: doc.status ?? '',
+    rv: doc.rv ?? null,
+    pct925: doc.pct925 ?? null,
+    trigger: doc.trigger ?? null,
+    stop: doc.stop ?? null,
+    entryTime: doc.entryTime ?? null,
+    entry: doc.entry ?? null,
+    qty: doc.qty ?? null,
+    target: doc.target ?? null,
+    exitTime: doc.exitTime ?? null,
+    exitReason: doc.exitReason ?? null,
+    tranches: Array.isArray(doc.tranches) ? doc.tranches : [],
+    grossPnl: doc.grossPnl ?? null,
+    costs: doc.costs ?? null,
+    netPnl: doc.netPnl ?? null,
+    rMultiple: doc.rMultiple ?? null,
+    skipReason: doc.skipReason ?? null,
+  }
+}
+
+export function serializeIntradaySummary(doc: Raw): IntradaySummary | null {
+  if (!doc || !doc.byArm) return null
+  const arm = (a: Raw | undefined) => ({
+    trades: a?.trades ?? 0,
+    wins: a?.wins ?? 0,
+    winRate: a?.winRate ?? null,
+    avgR: a?.avgR ?? null,
+    netPnl: a?.netPnl ?? 0,
+    equity: a?.equity ?? 0,
+    grossPnl: a?.grossPnl ?? 0,
+    costs: a?.costs ?? 0,
+  })
+  return {
+    capital: doc.capital ?? 0,
+    byArm: { A: arm(doc.byArm.A), B: arm(doc.byArm.B) },
+  }
+}

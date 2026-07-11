@@ -101,3 +101,72 @@ export const ScannerSettingsModel: Model<ScannerDoc> =
 export const ScannerStatsModel: Model<ScannerDoc> =
   (mongoose.models.ScannerStats as Model<ScannerDoc>) ||
   mongoose.model<ScannerDoc>('ScannerStats', statsSchema, 'scannerStats')
+
+// Intraday replay collections (Python: scanner/intraday/publishing.py). Runs key on a
+// plain `date`; trades key on a STRING `_id` "{date}_{symbol}_{arm}"; stats is the
+// `_id: "summary"` singleton.
+const intradayRunSchema = new Schema<ScannerDoc>(
+  {
+    date: { type: String },
+    status: { type: String },
+  },
+  { strict: false, collection: 'scannerIntradayRuns' },
+)
+
+const intradayTradeSchema = new Schema<ScannerDoc>(
+  {
+    _id: { type: String },
+    date: { type: String },
+    symbol: { type: String },
+    arm: { type: String },
+    status: { type: String },
+  },
+  { strict: false, collection: 'scannerIntradayTrades' },
+)
+
+const intradayStatsSchema = new Schema<ScannerDoc>(
+  {
+    _id: { type: String },
+  },
+  { strict: false, collection: 'scannerIntradayStats' },
+)
+
+export const ScannerIntradayRunModel: Model<ScannerDoc> =
+  (mongoose.models.ScannerIntradayRun as Model<ScannerDoc>) ||
+  mongoose.model<ScannerDoc>(
+    'ScannerIntradayRun',
+    intradayRunSchema,
+    'scannerIntradayRuns',
+  )
+
+export const ScannerIntradayTradeModel: Model<ScannerDoc> =
+  (mongoose.models.ScannerIntradayTrade as Model<ScannerDoc>) ||
+  mongoose.model<ScannerDoc>(
+    'ScannerIntradayTrade',
+    intradayTradeSchema,
+    'scannerIntradayTrades',
+  )
+
+const intradayLiveSchema = new Schema<ScannerDoc>(
+  {
+    _id: { type: String }, // the session date YYYY-MM-DD
+    phase: { type: String },
+  },
+  { strict: false, collection: 'scannerIntradayLive' },
+)
+
+export const ScannerIntradayLiveModel: Model<ScannerDoc> =
+  (mongoose.models.ScannerIntradayLive as Model<ScannerDoc>) ||
+  mongoose.model<ScannerDoc>(
+    'ScannerIntradayLive',
+    intradayLiveSchema,
+    'scannerIntradayLive',
+  )
+
+export const ScannerIntradayStatsModel: Model<ScannerDoc> =
+  (mongoose.models.ScannerIntradayStats as Model<ScannerDoc>) ||
+  mongoose.model<ScannerDoc>(
+    'ScannerIntradayStats',
+    intradayStatsSchema,
+    'scannerIntradayStats',
+  )
