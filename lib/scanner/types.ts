@@ -308,6 +308,22 @@ export type IntradaySectorRow = {
   name: string
   pct920: number | null
   pct925: number | null
+  proxy?: boolean
+}
+
+// A candidate that survived the whole checklist (build_candidates → `picks`).
+export type IntradayPick = {
+  symbol: string
+  pct925: number | null
+  rv: number | null
+}
+
+// A candidate dropped at some gate — `reason` is the exact engine string
+// ("wrong side of VWAP", "not the top mover", "doji first bar", …).
+export type IntradayReject = {
+  symbol: string
+  reason: string
+  pct925?: number | null
 }
 
 export type IntradayRun = {
@@ -320,6 +336,11 @@ export type IntradayRun = {
   dayPnlA?: number | null
   dayPnlB?: number | null
   warnings?: string[]
+  // The full decision record the publisher persists (publishing.py run_doc) —
+  // surfaced so the site can show the sector ranking + pick funnel per session.
+  sectorTable?: IntradaySectorRow[]
+  picks?: IntradayPick[]
+  rejects?: IntradayReject[]
 }
 
 export type IntradayTranche = {

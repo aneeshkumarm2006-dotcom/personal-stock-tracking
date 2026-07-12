@@ -254,7 +254,27 @@ export function serializeSettings(raw: Raw): ScannerSettings {
 
 // ── Intraday replay serializers ─────────────────────────────────────────────
 
-import type { IntradayRun, IntradaySummary, IntradayTrade } from './types'
+import type {
+  IntradayPick,
+  IntradayReject,
+  IntradayRun,
+  IntradaySectorRow,
+  IntradaySummary,
+  IntradayTrade,
+} from './types'
+
+const num = (v: unknown): number | null =>
+  typeof v === 'number' && !Number.isNaN(v) ? v : null
+
+export function serializeIntradaySectorRow(doc: Raw): IntradaySectorRow {
+  return {
+    key: String(doc.key ?? ''),
+    name: String(doc.name ?? doc.key ?? ''),
+    pct920: num(doc.pct920),
+    pct925: num(doc.pct925),
+    proxy: doc.proxy === true,
+  }
+}
 
 export function serializeIntradayRun(doc: Raw): IntradayRun {
   return {
@@ -267,6 +287,27 @@ export function serializeIntradayRun(doc: Raw): IntradayRun {
     dayPnlA: typeof doc.dayPnlA === 'number' ? doc.dayPnlA : null,
     dayPnlB: typeof doc.dayPnlB === 'number' ? doc.dayPnlB : null,
     warnings: Array.isArray(doc.warnings) ? doc.warnings.map(String) : [],
+    sectorTable: Array.isArray(doc.sectorTable)
+      ? doc.sectorTable.map(serializeIntradaySectorRow)
+      : [],
+    picks: Array.isArray(doc.picks)
+      ? doc.picks.map(
+          (p: Raw): IntradayPick => ({
+            symbol: String(p.symbol ?? ''),
+            pct925: num(p.pct925),
+            rv: num(p.rv),
+          }),
+        )
+      : [],
+    rejects: Array.isArray(doc.rejects)
+      ? doc.rejects.map(
+          (r: Raw): IntradayReject => ({
+            symbol: String(r.symbol ?? ''),
+            reason: String(r.reason ?? 'rejected'),
+            pct925: num(r.pct925),
+          }),
+        )
+      : [],
   }
 }
 
