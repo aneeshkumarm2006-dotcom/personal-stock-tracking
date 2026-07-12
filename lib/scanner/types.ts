@@ -112,6 +112,7 @@ export type ScannerRun = {
 export type ScannerSignal = {
   id: string
   date: string
+  family?: string // 'swing' (default/absent) | 'pattern' — D-1 discriminator
   symbol: string
   token: string
   rank: number
@@ -358,4 +359,122 @@ export type IntradayOverview = {
   summary: IntradaySummary | null
   recentRuns: IntradayRun[]
   recentTrades: IntradayTrade[]
+}
+
+// ── Chart patterns (Phase 11) — the 3rd `/scanner` tab ──────────────────────
+// Detections are `scannerSignals`/`scannerPositions` docs tagged family='pattern'
+// (D-1 reuse). The per-bucket forward-test scoreboard is its OWN collection,
+// `scannerPatternStats` (never pooled with the swing scannerStats). Pattern
+// geometry (necklines, trendlines, cup rims, pivots) rides the free-form
+// `extras{}` on each detection signal; `serializePatternDetection` lifts it out.
+
+// One (bucket, cohort) trade-quality block — `paper/stats._trade_block` extended
+// with `fills` / ₹ `expectancy` / a verdict `status` (§10, pattern_stats.py).
+// winRate/avgR are fractions/ratios (or null with no closed trades); expectancy
+// is ₹ per closed trade.
+export type PatternCohortBlock = {
+  closedTrades: number
+  openTrades: number
+  fills: number
+  winRate: number | null
+  avgR: number | null
+  profitFactor: number | null
+  avgHoldSessions: number | null
+  expectancy: number | null
+  totalRealizedNet: number
+  totalUnrealized: number
+  status: string // 'ready' (>=30 fills) | 'accumulating'
+}
+
+// One detector's forward-test scoreboard row — tradable and untradable cohorts
+// kept strictly separate (never pooled, §10).
+export type PatternBucket = {
+  key: string
+  tier: string | null
+  tradable: PatternCohortBlock
+  untradable: PatternCohortBlock
+}
+
+export type PatternStatsSummary = {
+  asOf: string | null // the paper evaluation session P
+  capital: number
+  bucketCount: number
+  buckets: PatternBucket[]
+}
+
+// A single pattern detection (a family='pattern' scannerSignals doc). `strategy`
+// is the detector/bucket key (e.g. `cup_handle`); `quality` is the per-pattern
+// quality sub-score (0..100, D-3), NOT the swing composite. `geometry` is the
+// raw overlay set the signal-detail chart draws (pivots/trendlines/levels), with
+// positions expressed as bar indices relative to the detection frame.
+export type PatternDetection = {
+  id: string
+  date: string
+  symbol: string
+  token: string
+  strategy: string
+  setup: string
+  subSetup?: string | null
+  tier: string | null
+  quality: number
+  qualityComponents: Record<string, number>
+  buy?: number | null
+  sl?: number | null
+  tp1?: number | null
+  tp2?: number | null
+  rr?: number | null
+  plannedQty: number
+  riskPct?: number | null
+  validitySessions?: number | null
+  flags: string[]
+  tradable: boolean
+  series: string
+  confirmDate: string | null
+  measuredMove?: number | null
+  geometry: Record<string, unknown>
+  rank: number
+  updatedAt?: string | null
+}
+
+// A detection joined to its paper position (the forward-test outcome) for the
+// detections-by-day view — mirrors DaySignal.
+export type PatternDetectionRow = PatternDetection & {
+  position: ScannerPosition | null
+}
+
+export type PatternDay = {
+  date: string
+  detections: PatternDetectionRow[]
+  total: number
+  tradable: number
+}
+
+// Lightweight per-day count for the "recent days" strip (links to the day page).
+export type PatternDayCount = {
+  date: string
+  total: number
+  tradable: number
+}
+
+export type PatternsOverview = {
+  summary: PatternStatsSummary | null
+  latestDay: PatternDay | null
+  recentDays: PatternDayCount[]
+  lastDetectionDate: string | null
+  totalDetections: number
+}
+
+export type PatternSignalView = {
+  detection: PatternDetection | null
+  position: ScannerPosition | null
+}
+
+export type PatternHealth = {
+  lastDetectionDate: string | null
+  lastPublishedAt: string | null
+  ageHours: number | null
+  detectionCountLastDay: number
+  asOf: string | null
+  bucketCount: number
+  totalFills: number
 }

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { getHealth } from '@/lib/scanner/queries'
+import { getHealth, getPatternsHealth } from '@/lib/scanner/queries'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/table'
 import { GateFunnel } from '@/components/scanner/GateFunnel'
 import { formatInt, formatIstDateTime } from '@/lib/format'
+import type { PatternHealth } from '@/lib/scanner/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,8 +93,103 @@ function formatAge(ageHours: number | null): string {
   return `${(ageHours / 24).toFixed(1)} d ago`
 }
 
+// Pattern-pipeline freshness — rendered whether or not the swing scanner has run
+// (the pattern publisher writes no scannerRuns doc, so its health is independent).
+function PatternPipelineSection({ health }: { health: PatternHealth }) {
+  return (
+    <section className="space-y-3">
+      <SectionHeader
+        title="Pattern pipeline"
+        hint={health.lastDetectionDate ?? undefined}
+      />
+      {health.lastDetectionDate == null ? (
+        <p className="text-muted-foreground text-sm">
+          No chart-pattern detections have published yet.
+        </p>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <CardTitle>Detection freshness</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <div className="text-muted-foreground text-xs">Data age</div>
+                <div
+                  className={`text-2xl font-semibold tabular-nums ${freshnessClass(health.ageHours)}`}
+                >
+                  {formatAge(health.ageHours)}
+                </div>
+              </div>
+              <dl className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt className="text-muted-foreground text-xs">Last detection</dt>
+                  <dd className="font-medium">{health.lastDetectionDate ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground text-xs">Published</dt>
+                  <dd className="font-medium">
+                    {health.lastPublishedAt
+                      ? formatIstDateTime(health.lastPublishedAt)
+                      : '—'}
+                  </dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Detections</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt className="text-muted-foreground text-xs">Latest session</dt>
+                  <dd className="font-medium tabular-nums">
+                    {formatInt(health.detectionCountLastDay)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground text-xs">Paper as-of</dt>
+                  <dd className="font-medium">{health.asOf ?? '—'}</dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Forward-test book</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt className="text-muted-foreground text-xs">Buckets</dt>
+                  <dd className="font-medium tabular-nums">
+                    {formatInt(health.bucketCount)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground text-xs">Total fills</dt>
+                  <dd className="font-medium tabular-nums">
+                    {formatInt(health.totalFills)}
+                  </dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default async function ScannerHealthPage() {
-  const health = await getHealth()
+  const [health, patternHealth] = await Promise.all([
+    getHealth(),
+    getPatternsHealth(),
+  ])
   const { latestRun, recentRuns, lastRunDate, ageHours } = health
 
   if (latestRun == null) {
@@ -107,6 +203,7 @@ export default async function ScannerHealthPage() {
           title="No scans have run yet"
           description="Run health appears here once the scanner engine has published its first run."
         />
+        <PatternPipelineSection health={patternHealth} />
       </div>
     )
   }
@@ -244,6 +341,8 @@ export default async function ScannerHealthPage() {
           </Card>
         </div>
       </section>
+
+      <PatternPipelineSection health={patternHealth} />
 
       <section className="space-y-3">
         <SectionHeader

@@ -53,6 +53,7 @@ export function serializeSignal(raw: Raw): ScannerSignal {
   return {
     id: toId(d._id),
     date: d.date ?? '',
+    family: d.family ?? 'swing',
     symbol: d.symbol ?? '',
     token: d.token != null ? String(d.token) : '',
     rank: typeof d.rank === 'number' ? d.rank : 0,
@@ -312,5 +313,117 @@ export function serializeIntradaySummary(doc: Raw): IntradaySummary | null {
   return {
     capital: doc.capital ?? 0,
     byArm: { A: arm(doc.byArm.A), B: arm(doc.byArm.B) },
+  }
+}
+
+// ── Chart-pattern serializers (Phase 11) ────────────────────────────────────
+
+import type {
+  PatternDetection,
+  PatternCohortBlock,
+  PatternBucket,
+  PatternStatsSummary,
+} from './types'
+
+// Meta keys the publisher stores on a pattern signal's `extras{}` alongside the
+// geometry — lifted into first-class fields, then stripped so `geometry` is the
+// pure overlay set (pivots / trendlines / levels + measured_move).
+const PATTERN_EXTRA_META = new Set([
+  'quality',
+  'tier',
+  'confirm_date',
+  'confirm_pos',
+  'tradable',
+  'series',
+])
+
+function toNum(v: unknown): number | null {
+  return typeof v === 'number' && !Number.isNaN(v) ? v : null
+}
+
+// A family='pattern' scannerSignals lean doc → the typed detection. Geometry,
+// tier, quality sub-score, tradability and confirm bar all ride `extras{}`
+// (publish.py::_signal_extras); everything not a known meta key is geometry.
+export function serializePatternDetection(raw: Raw): PatternDetection {
+  const d = raw ?? {}
+  const extras = asRecord(d.extras)
+  const qualityBlock = asRecord(extras.quality)
+  const geometry: Record<string, unknown> = {}
+  for (const key of Object.keys(extras)) {
+    if (!PATTERN_EXTRA_META.has(key)) geometry[key] = extras[key]
+  }
+  // extras.quality.components is the canonical breakdown; publish.py also mirrors
+  // it to scoreBreakdown, so fall back there only if the quality block is empty.
+  const qc = asRecord(qualityBlock.components)
+  const components = (
+    Object.keys(qc).length ? qc : asRecord(d.scoreBreakdown)
+  ) as Record<string, number>
+  return {
+    id: toId(d._id),
+    date: d.date ?? '',
+    symbol: d.symbol ?? '',
+    token: d.token != null ? String(d.token) : '',
+    strategy: d.strategy ?? '',
+    setup: d.setup ?? d.strategy ?? '',
+    subSetup: d.subSetup ?? null,
+    tier: (extras.tier as string | undefined) ?? null,
+    quality:
+      typeof d.score === 'number' ? d.score : (toNum(qualityBlock.score) ?? 0),
+    qualityComponents: components,
+    buy: d.buy ?? null,
+    sl: d.sl ?? null,
+    tp1: d.tp1 ?? null,
+    tp2: d.tp2 ?? null,
+    rr: d.rr ?? null,
+    plannedQty: typeof d.plannedQty === 'number' ? d.plannedQty : 0,
+    riskPct: d.riskPct ?? null,
+    validitySessions: d.validitySessions ?? null,
+    flags: asArray<string>(d.flags),
+    tradable: extras.tradable !== false,
+    series: (extras.series as string | undefined) ?? 'EQ',
+    confirmDate: (extras.confirm_date as string | undefined) ?? null,
+    measuredMove: toNum(geometry.measured_move),
+    geometry,
+    rank: typeof d.rank === 'number' ? d.rank : 0,
+    updatedAt: toISO(d.updatedAt),
+  }
+}
+
+function serializePatternCohort(raw: unknown): PatternCohortBlock {
+  const b = asRecord(raw)
+  return {
+    closedTrades: typeof b.closedTrades === 'number' ? b.closedTrades : 0,
+    openTrades: typeof b.openTrades === 'number' ? b.openTrades : 0,
+    fills: typeof b.fills === 'number' ? b.fills : 0,
+    winRate: b.winRate ?? null,
+    avgR: b.avgR ?? null,
+    profitFactor: b.profitFactor ?? null,
+    avgHoldSessions: b.avgHoldSessions ?? null,
+    expectancy: b.expectancy ?? null,
+    totalRealizedNet: typeof b.totalRealizedNet === 'number' ? b.totalRealizedNet : 0,
+    totalUnrealized: typeof b.totalUnrealized === 'number' ? b.totalUnrealized : 0,
+    status: (b.status as string | undefined) ?? 'accumulating',
+  }
+}
+
+export function serializePatternStats(raw: Raw): PatternStatsSummary {
+  const d = raw ?? {}
+  const byBucketRaw = asRecord(d.byBucket)
+  const buckets: PatternBucket[] = Object.keys(byBucketRaw)
+    .sort()
+    .map((key) => {
+      const b = asRecord(byBucketRaw[key])
+      return {
+        key,
+        tier: (b.tier as string | undefined) ?? null,
+        tradable: serializePatternCohort(b.tradable),
+        untradable: serializePatternCohort(b.untradable),
+      }
+    })
+  return {
+    asOf: d.asOf ?? null,
+    capital: typeof d.capital === 'number' ? d.capital : 0,
+    bucketCount: typeof d.buckets === 'number' ? d.buckets : buckets.length,
+    buckets,
   }
 }

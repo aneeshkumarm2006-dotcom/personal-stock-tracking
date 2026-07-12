@@ -1,6 +1,10 @@
 import Link from 'next/link'
 
-import { getIntradayOverview, getOverview } from '@/lib/scanner/queries'
+import {
+  getIntradayOverview,
+  getOverview,
+  getPatternsOverview,
+} from '@/lib/scanner/queries'
 import { formatInt, formatIstDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PageHeader, SectionHeader } from '@/components/PageHeader'
@@ -13,6 +17,7 @@ import { PerStrategyTable } from '@/components/scanner/PerStrategyTable'
 import { PerStockTable } from '@/components/scanner/PerStockTable'
 import { ScannerLevelsTable } from '@/components/scanner/ScannerLevelsTable'
 import { IntradayTab } from '@/components/scanner/IntradayTab'
+import { PatternsTab } from '@/components/scanner/PatternsTab'
 import type { ScannerRun } from '@/lib/scanner/types'
 
 export const dynamic = 'force-dynamic'
@@ -130,25 +135,33 @@ function SwingTab({ data }: { data: Awaited<ReturnType<typeof getOverview>> }) {
 }
 
 export default async function ScannerOverviewPage() {
-  const [data, intraday] = await Promise.all([getOverview(), getIntradayOverview()])
+  const [data, intraday, patterns] = await Promise.all([
+    getOverview(),
+    getIntradayOverview(),
+    getPatternsOverview(),
+  ])
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
         title="Scanner"
-        description="Forward-test performance of the scanner — short-term swing setups and intraday signals."
+        description="Forward-test performance of the scanner — swing setups, intraday signals and chart patterns."
       />
 
       <Tabs defaultValue="swing">
         <TabsList>
           <TabsTrigger value="swing">Swing</TabsTrigger>
           <TabsTrigger value="intraday">Intraday</TabsTrigger>
+          <TabsTrigger value="patterns">Patterns</TabsTrigger>
         </TabsList>
         <TabsContent value="swing" className="pt-4">
           <SwingTab data={data} />
         </TabsContent>
         <TabsContent value="intraday" className="pt-4">
           <IntradayTab data={intraday} />
+        </TabsContent>
+        <TabsContent value="patterns" className="pt-4">
+          <PatternsTab data={patterns} />
         </TabsContent>
       </Tabs>
     </div>

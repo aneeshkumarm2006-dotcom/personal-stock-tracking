@@ -170,3 +170,24 @@ export const ScannerIntradayStatsModel: Model<ScannerDoc> =
     intradayStatsSchema,
     'scannerIntradayStats',
   )
+
+// Chart-pattern scoreboard (Python: scanner/patterns/pattern_stats.py). The
+// per-bucket forward-test summary, `_id: "summary"` singleton — kept in its OWN
+// collection so the "detect-everything" pattern buckets never touch the swing
+// scannerStats equity/summary. Pattern DETECTIONS/POSITIONS reuse the shared
+// scannerSignals/scannerPositions collections above (family='pattern', D-1), so
+// they need no extra model — the queries filter by family instead.
+const patternStatsSchema = new Schema<ScannerDoc>(
+  {
+    _id: { type: String },
+  },
+  { strict: false, collection: 'scannerPatternStats' },
+)
+
+export const ScannerPatternStatsModel: Model<ScannerDoc> =
+  (mongoose.models.ScannerPatternStats as Model<ScannerDoc>) ||
+  mongoose.model<ScannerDoc>(
+    'ScannerPatternStats',
+    patternStatsSchema,
+    'scannerPatternStats',
+  )

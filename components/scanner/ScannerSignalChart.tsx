@@ -145,6 +145,240 @@ function CandleLayer({ points }: { points: ChartPoint[] }) {
   )
 }
 
+// ── Pattern geometry overlay ────────────────────────────────────────────────
+// Draws the stored detection geometry (necklines, rims, trendlines, pivots, poles)
+// over the candles. All positions in `geometry` are BAR INDICES into the detection
+// frame (not dates); they map to the chart's date labels via the confirm anchor —
+// pattern_span[1] is the confirm bar (== confirmDate), so bar `pos` lands on
+// labels[confirmIdx - (jPos - pos)]. Out-of-window positions (a window too short
+// for a long base) are simply skipped, so the level lines always render even when
+// the pivots/trendlines don't.
+
+const GEO_COLOR = '#8b5cf6' // violet — distinct from Buy/SL/TP, readable in both themes
+
+// Whitelisted single-price levels → label (a horizontal line across the pattern).
+const GEO_SCALAR_LEVELS: Record<string, string> = {
+  neckline: 'Neckline',
+  head: 'Head',
+  resistance: 'Resistance',
+  support: 'Support',
+  valley: 'Valley',
+  peak: 'Peak',
+  cup_low: 'Cup low',
+  handle_low: 'Handle',
+  range_hi: 'Range hi',
+  range_lo: 'Range lo',
+  flag_low: 'Flag low',
+  flag_high: 'Flag high',
+  reclaim_level: 'Reclaim',
+}
+// Price PAIRS → two horizontal lines (rim/bottoms/shoulders).
+const GEO_PAIR_LEVELS: Record<string, [string, string]> = {
+  cup_rim: ['Left rim', 'Right rim'],
+  bottoms: ['Bottom 1', 'Bottom 2'],
+  shoulders: ['L shoulder', 'R shoulder'],
+}
+// [slope, intercept] in position space (price = slope*pos + intercept).
+const GEO_TRENDLINES = new Set(['support_line', 'resistance_line', 'upper_line'])
+
+function isNum(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v)
+}
+function numPair(v: unknown): [number, number] | null {
+  return Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(v[1])
+    ? [v[0], v[1]]
+    : null
+}
+
+// Every price-like value in the geometry, so the y-domain can fold them in and
+// nothing clips outside the plotted candle range.
+function geometryPrices(geometry: Record<string, unknown>): number[] {
+  const out: number[] = []
+  const span = numPair(geometry.pattern_span)
+  for (const [key, value] of Object.entries(geometry)) {
+    if (key in GEO_SCALAR_LEVELS && isNum(value)) out.push(value)
+    else if (key in GEO_PAIR_LEVELS) {
+      const p = numPair(value)
+      if (p) out.push(p[0], p[1])
+    } else if (GEO_TRENDLINES.has(key)) {
+      const line = numPair(value)
+      if (line && span) out.push(line[0] * span[0] + line[1], line[0] * span[1] + line[1])
+    } else if (key === 'pole' && Array.isArray(value) && value.length === 4) {
+      if (isNum(value[1])) out.push(value[1])
+      if (isNum(value[3])) out.push(value[3])
+    } else if (key === 'pivots' && Array.isArray(value)) {
+      for (const piv of value) if (Array.isArray(piv) && isNum(piv[1])) out.push(piv[1])
+    }
+  }
+  return out.filter(Number.isFinite)
+}
+
+function PatternOverlayLayer({
+  geometry,
+  labels,
+  confirmLabel,
+}: {
+  geometry: Record<string, unknown>
+  labels: string[]
+  confirmLabel: string | null
+}) {
+  const xScale = useXAxisScale(0)
+  const yScale = useYAxisScale('price')
+  if (!xScale || !yScale || !confirmLabel) return null
+  const confirmIdx = labels.indexOf(confirmLabel)
+  if (confirmIdx < 0) return null
+
+  const span = numPair(geometry.pattern_span)
+  const jPos = span ? span[1] : null
+
+  const labelOf = (pos: number): string | null => {
+    if (jPos == null) return null
+    const idx = confirmIdx - (jPos - pos)
+    return idx >= 0 && idx < labels.length ? labels[idx]! : null
+  }
+  const xOf = (pos: number): number | null => {
+    const l = labelOf(pos)
+    if (l == null) return null
+    const x = xScale(l, { position: 'middle' })
+    return x == null ? null : x
+  }
+  const firstLabel = labels[0]
+  const lastLabel = labels[labels.length - 1]
+  const leftEdge = firstLabel ? (xScale(firstLabel, { position: 'start' }) ?? null) : null
+  const rightEdge = lastLabel ? (xScale(lastLabel, { position: 'end' }) ?? null) : null
+  const confirmX = xScale(confirmLabel, { position: 'middle' }) ?? rightEdge
+  const spanStartX = span ? (xOf(span[0]) ?? leftEdge) : leftEdge
+  const spanEndX = confirmX ?? rightEdge
+
+  const elems: React.ReactNode[] = []
+
+  const drawLevel = (price: number, text: string, key: string) => {
+    const yy = yScale(price)
+    if (yy == null || spanStartX == null || spanEndX == null) return
+    elems.push(
+      <g key={key}>
+        <line
+          x1={spanStartX}
+          y1={yy}
+          x2={spanEndX}
+          y2={yy}
+          stroke={GEO_COLOR}
+          strokeWidth={1}
+          strokeDasharray="2 3"
+          opacity={0.9}
+        />
+        <text x={spanStartX + 2} y={yy - 2} fill={GEO_COLOR} fontSize={9}>
+          {text}
+        </text>
+      </g>,
+    )
+  }
+
+  for (const [key, value] of Object.entries(geometry)) {
+    if (key in GEO_SCALAR_LEVELS && isNum(value)) {
+      drawLevel(value, GEO_SCALAR_LEVELS[key]!, `lvl-${key}`)
+    } else if (key in GEO_PAIR_LEVELS) {
+      const p = numPair(value)
+      if (p) {
+        drawLevel(p[0], GEO_PAIR_LEVELS[key]![0], `lvl-${key}-0`)
+        drawLevel(p[1], GEO_PAIR_LEVELS[key]![1], `lvl-${key}-1`)
+      }
+    } else if (GEO_TRENDLINES.has(key)) {
+      const line = numPair(value)
+      if (line && span) {
+        let a: number | null = null
+        let b: number | null = null
+        for (let p = span[0]; p <= span[1]; p++) {
+          if (labelOf(p) != null) {
+            if (a == null) a = p
+            b = p
+          }
+        }
+        if (a != null && b != null) {
+          const xa = xOf(a)
+          const xb = xOf(b)
+          const ya = yScale(line[0] * a + line[1])
+          const yb = yScale(line[0] * b + line[1])
+          if (xa != null && xb != null && ya != null && yb != null) {
+            elems.push(
+              <line
+                key={`tl-${key}`}
+                x1={xa}
+                y1={ya}
+                x2={xb}
+                y2={yb}
+                stroke={GEO_COLOR}
+                strokeWidth={1.5}
+                opacity={0.9}
+              />,
+            )
+          }
+        }
+      }
+    } else if (
+      key === 'pole' &&
+      Array.isArray(value) &&
+      value.length === 4 &&
+      isNum(value[0]) &&
+      isNum(value[1]) &&
+      isNum(value[2]) &&
+      isNum(value[3])
+    ) {
+      const xa = xOf(value[0])
+      const xb = xOf(value[2])
+      const ya = yScale(value[1])
+      const yb = yScale(value[3])
+      if (xa != null && xb != null && ya != null && yb != null) {
+        elems.push(
+          <line
+            key="pole"
+            x1={xa}
+            y1={ya}
+            x2={xb}
+            y2={yb}
+            stroke={GEO_COLOR}
+            strokeWidth={1.5}
+            opacity={0.9}
+          />,
+        )
+      }
+    } else if (key === 'pivots' && Array.isArray(value)) {
+      value.forEach((piv, i) => {
+        if (!Array.isArray(piv) || !isNum(piv[0]) || !isNum(piv[1])) return
+        const x = xOf(piv[0])
+        const y = yScale(piv[1])
+        if (x == null || y == null) return
+        const kind = typeof piv[2] === 'string' ? piv[2] : ''
+        elems.push(
+          <g key={`piv-${i}`}>
+            <circle
+              cx={x}
+              cy={y}
+              r={3}
+              fill={GEO_COLOR}
+              stroke="var(--background)"
+              strokeWidth={1}
+            />
+            {kind ? (
+              <text
+                x={x}
+                y={kind === 'H' ? y - 5 : y + 11}
+                fill={GEO_COLOR}
+                fontSize={9}
+                textAnchor="middle"
+              >
+                {kind}
+              </text>
+            ) : null}
+          </g>,
+        )
+      })
+    }
+  }
+
+  return <g>{elems}</g>
+}
+
 type ChartTooltipProps = {
   active?: boolean
   payload?: Array<{ payload: ChartPoint }>
@@ -220,6 +454,10 @@ export type ScannerSignalChartProps = {
   entryPrice: number | null
   exitDate: string | null
   exitPrice: number | null
+  // Optional chart-pattern overlay (pivots/trendlines/levels). `confirmDate` is
+  // the breakout bar the geometry's bar-index positions anchor to.
+  patternGeometry?: Record<string, unknown> | null
+  confirmDate?: string | null
 }
 
 export function ScannerSignalChart({
@@ -233,6 +471,8 @@ export function ScannerSignalChart({
   entryPrice,
   exitDate,
   exitPrice,
+  patternGeometry = null,
+  confirmDate = null,
 }: ScannerSignalChartProps) {
   // EOD scanner data — no need to poll. Fetch once and cache generously.
   const candlesQuery = useQuery({
@@ -262,6 +502,14 @@ export function ScannerSignalChart({
   const labels = useMemo(() => points.map((p) => p.label), [points])
   const entryLabel = useMemo(() => snapLabel(entryDate, labels), [entryDate, labels])
   const exitLabel = useMemo(() => snapLabel(exitDate, labels), [exitDate, labels])
+  const confirmLabel = useMemo(
+    () => snapLabel(confirmDate ?? null, labels),
+    [confirmDate, labels],
+  )
+  const geoPrices = useMemo(
+    () => (patternGeometry ? geometryPrices(patternGeometry) : []),
+    [patternGeometry],
+  )
 
   // Fold the buy/sl/tp levels and entry/exit prices into the price domain so the
   // reference lines and dots never clip outside the plotted candle range.
@@ -273,7 +521,7 @@ export function ScannerSignalChart({
       if (p.low < min) min = p.low
       if (p.high > max) max = p.high
     }
-    for (const lv of [buy, sl, tp1, tp2, entryPrice, exitPrice]) {
+    for (const lv of [buy, sl, tp1, tp2, entryPrice, exitPrice, ...geoPrices]) {
       if (typeof lv === 'number' && Number.isFinite(lv)) {
         if (lv < min) min = lv
         if (lv > max) max = lv
@@ -282,7 +530,7 @@ export function ScannerSignalChart({
     if (!Number.isFinite(min) || !Number.isFinite(max)) return ['auto', 'auto']
     const pad = (max - min) * 0.05 || max * 0.05 || 1
     return [min - pad, max + pad]
-  }, [points, buy, sl, tp1, tp2, entryPrice, exitPrice])
+  }, [points, buy, sl, tp1, tp2, entryPrice, exitPrice, geoPrices])
 
   const maxVolume = points.reduce((m, p) => Math.max(m, p.volume), 0)
   const hasVolume = maxVolume > 0
@@ -292,6 +540,9 @@ export function ScannerSignalChart({
   if (typeof sl === 'number') legendItems.push({ label: 'Stop', color: SL_COLOR })
   if (typeof tp1 === 'number' || typeof tp2 === 'number') {
     legendItems.push({ label: 'Target', color: TP_COLOR })
+  }
+  if (patternGeometry && Object.keys(patternGeometry).length > 0) {
+    legendItems.push({ label: 'Pattern geometry', color: GEO_COLOR })
   }
 
   if (candlesQuery.isLoading) {
@@ -359,6 +610,13 @@ export function ScannerSignalChart({
             isAnimationActive={false}
           />
           <CandleLayer points={points} />
+          {patternGeometry && (
+            <PatternOverlayLayer
+              geometry={patternGeometry}
+              labels={labels}
+              confirmLabel={confirmLabel}
+            />
+          )}
           {typeof buy === 'number' && (
             <ReferenceLine
               yAxisId="price"

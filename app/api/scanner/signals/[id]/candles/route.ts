@@ -13,6 +13,11 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // ~120 calendar days of pre-signal context, and a few sessions of tail after the
 // exit so the exit marker never sits flush against the chart's right edge.
 const LOOKBACK_DAYS = 120
+// Chart patterns anchor bar-index geometry (pivots/trendlines) that can reach far
+// back — a cup base runs up to ~160 sessions. Widen the window for family=pattern
+// so the whole pattern (not just the breakout) is drawable. ~1 trading year of
+// calendar days comfortably covers the longest base.
+const PATTERN_LOOKBACK_DAYS = 360
 const EXIT_PAD_DAYS = 5
 
 // Trading dates are YYYY-MM-DD strings. new Date('YYYY-MM-DD') is UTC midnight,
@@ -38,7 +43,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
   const signalDate =
     parseDay(signal?.date) ?? parseDay(position?.signalDate) ?? new Date()
-  const from = new Date(signalDate.getTime() - LOOKBACK_DAYS * DAY_MS)
+  const lookbackDays =
+    signal?.family === 'pattern' ? PATTERN_LOOKBACK_DAYS : LOOKBACK_DAYS
+  const from = new Date(signalDate.getTime() - lookbackDays * DAY_MS)
 
   // Closed trades bound the window to a few days past the exit; open/pending
   // trades run through today.

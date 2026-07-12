@@ -35,6 +35,15 @@ import type { ScannerSettingsUpdate } from './schemas'
 
 type Raw = Record<string, any>
 
+// Read-side firewall (Inv 4): the swing tab must never read a family='pattern'
+// doc. Python already scopes the pattern paper/publish/prune to their own family;
+// the Phase-6 swing read-layer predates patterns, so the swing signal/position
+// reads are scoped here. `$ne: 'pattern'` keeps legacy docs (no `family` field)
+// and explicit `swing` in the swing view. (scannerStats/scannerDailyStats/
+// scannerRuns are swing-only collections — patterns write scannerPatternStats and
+// no run/daily docs — so they need no filter.)
+const NOT_PATTERN = { family: { $ne: 'pattern' } }
+
 export async function getOverview(): Promise<OverviewData> {
   await connectDB()
   const [summaryDoc, dailyDocs, runDocs, openPositionsCount, positionDocs] =
@@ -42,8 +51,11 @@ export async function getOverview(): Promise<OverviewData> {
       ScannerStatsModel.findById('summary').lean<Raw>().exec(),
       ScannerDailyStatModel.find({}).sort({ date: 1 }).lean<Raw[]>().exec(),
       ScannerRunModel.find({}).sort({ date: -1 }).limit(10).lean<Raw[]>().exec(),
-      ScannerPositionModel.countDocuments({ status: 'OPEN' }).exec(),
-      ScannerPositionModel.find({}).lean<Raw[]>().exec(),
+      ScannerPositionModel.countDocuments({
+        status: 'OPEN',
+        ...NOT_PATTERN,
+      }).exec(),
+      ScannerPositionModel.find({ ...NOT_PATTERN }).lean<Raw[]>().exec(),
     ])
 
   const positions = (positionDocs ?? []).map(serializePosition)
@@ -196,7 +208,10 @@ export async function getDay(date: string): Promise<DayView> {
   await connectDB()
   const [runDoc, signalDocs] = await Promise.all([
     ScannerRunModel.findOne({ date }).lean<Raw>().exec(),
-    ScannerSignalModel.find({ date }).sort({ rank: 1 }).lean<Raw[]>().exec(),
+    ScannerSignalModel.find({ date, ...NOT_PATTERN })
+      .sort({ rank: 1 })
+      .lean<Raw[]>()
+      .exec(),
   ])
 
   const signals = signalDocs ?? []
@@ -234,7 +249,7 @@ export async function listPositions(
   filter: PositionsFilter,
 ): Promise<ScannerPosition[]> {
   await connectDB()
-  const query: Raw = {}
+  const query: Raw = { ...NOT_PATTERN }
   if (filter.status) query.status = filter.status
   if (filter.strategy) query.strategy = filter.strategy
   if (filter.date) query.signalDate = filter.date
@@ -380,4 +395,174 @@ export async function getIntradayOverview(): Promise<IntradayOverview> {
     recentRuns: (runDocs ?? []).map(serializeIntradayRun),
     recentTrades: (tradeDocs ?? []).map(serializeIntradayTrade),
   }
+}
+
+// ── Chart patterns (Phase 11) — the 3rd `/scanner` tab ──────────────────────
+// Detections/positions are the SAME scannerSignals/scannerPositions collections
+// tagged family='pattern' (D-1); the scoreboard is the scannerPatternStats
+// singleton. Everything below is family-scoped so it never reads a swing doc.
+
+import { ScannerPatternStatsModel } from './models'
+import {
+  serializePatternStats,
+  serializePatternDetection,
+} from './serialize'
+import type {
+  PatternsOverview,
+  PatternDay,
+  PatternDayCount,
+  PatternDetectionRow,
+  PatternSignalView,
+  PatternHealth,
+} from './types'
+
+const IS_PATTERN = { family: 'pattern' }
+
+// Batch-load the paper positions for a set of detections and stitch each
+// detection to its outcome (positionId == signal _id for patterns).
+async function attachPositions(
+  detections: ReturnType<typeof serializePatternDetection>[],
+): Promise<PatternDetectionRow[]> {
+  const ids = detections.map((d) => d.id).filter(Boolean)
+  const posDocs = ids.length
+    ? await ScannerPositionModel.find({ _id: { $in: ids }, ...IS_PATTERN })
+        .lean<Raw[]>()
+        .exec()
+    : []
+  const byId = new Map<string, Raw>()
+  for (const p of posDocs ?? []) {
+    if (p && p._id != null) byId.set(String(p._id), p)
+  }
+  return detections.map((d) => {
+    const posDoc = byId.get(d.id)
+    return { ...d, position: posDoc ? serializePosition(posDoc) : null }
+  })
+}
+
+export async function getPatternDay(date: string): Promise<PatternDay> {
+  await connectDB()
+  const signalDocs = await ScannerSignalModel.find({ date, ...IS_PATTERN })
+    .sort({ rank: 1 })
+    .lean<Raw[]>()
+    .exec()
+  const detections = (signalDocs ?? []).map(serializePatternDetection)
+  const rows = await attachPositions(detections)
+  return {
+    date,
+    detections: rows,
+    total: rows.length,
+    tradable: rows.filter((r) => r.tradable).length,
+  }
+}
+
+export async function getPatternsOverview(): Promise<PatternsOverview> {
+  await connectDB()
+  const [summaryDoc, dayCounts] = await Promise.all([
+    ScannerPatternStatsModel.findById('summary').lean<Raw>().exec(),
+    // Per-day detection counts (lightweight) for the recent-days strip.
+    ScannerSignalModel.aggregate([
+      { $match: { family: 'pattern' } },
+      {
+        $group: {
+          _id: '$date',
+          total: { $sum: 1 },
+          tradable: {
+            $sum: { $cond: [{ $eq: ['$extras.tradable', true] }, 1, 0] },
+          },
+        },
+      },
+      { $sort: { _id: -1 } },
+      { $limit: 15 },
+    ]).exec(),
+  ])
+
+  const recentDays: PatternDayCount[] = (dayCounts ?? [])
+    .map((r: Raw) => ({
+      date: String(r._id ?? ''),
+      total: typeof r.total === 'number' ? r.total : 0,
+      tradable: typeof r.tradable === 'number' ? r.tradable : 0,
+    }))
+    .filter((d: PatternDayCount) => d.date)
+
+  const lastDetectionDate = recentDays[0]?.date ?? null
+  // The most recent detection day is shown in full on the tab; older days are the
+  // count strip (links to /scanner/patterns/days/[date]).
+  const latestDay = lastDetectionDate
+    ? await getPatternDay(lastDetectionDate)
+    : null
+
+  return {
+    summary: summaryDoc ? serializePatternStats(summaryDoc) : null,
+    latestDay,
+    recentDays,
+    lastDetectionDate,
+    totalDetections: recentDays.reduce((sum, d) => sum + d.total, 0),
+  }
+}
+
+export async function getPatternSignal(id: string): Promise<PatternSignalView> {
+  await connectDB()
+  const [signalDoc, positionDoc] = await Promise.all([
+    ScannerSignalModel.findOne({ _id: id, ...IS_PATTERN }).lean<Raw>().exec(),
+    ScannerPositionModel.findOne({ _id: id, ...IS_PATTERN }).lean<Raw>().exec(),
+  ])
+  return {
+    detection: signalDoc ? serializePatternDetection(signalDoc) : null,
+    position: positionDoc ? serializePosition(positionDoc) : null,
+  }
+}
+
+export async function getPatternsHealth(): Promise<PatternHealth> {
+  await connectDB()
+  const [summaryDoc, latestDocs] = await Promise.all([
+    ScannerPatternStatsModel.findById('summary').lean<Raw>().exec(),
+    ScannerSignalModel.find({ ...IS_PATTERN })
+      .sort({ date: -1 })
+      .limit(1)
+      .lean<Raw[]>()
+      .exec(),
+  ])
+
+  const latest = (latestDocs ?? [])[0] ?? null
+  const lastDetectionDate = (latest?.date as string | undefined) ?? null
+  const lastPublishedAt = latest ? serializeSignalStamp(latest.updatedAt) : null
+
+  let ageHours: number | null = null
+  if (lastPublishedAt) {
+    const finished = new Date(lastPublishedAt).getTime()
+    if (!Number.isNaN(finished)) ageHours = (Date.now() - finished) / 3_600_000
+  }
+
+  const detectionCountLastDay = lastDetectionDate
+    ? await ScannerSignalModel.countDocuments({
+        date: lastDetectionDate,
+        ...IS_PATTERN,
+      }).exec()
+    : 0
+
+  const summary = summaryDoc ? serializePatternStats(summaryDoc) : null
+  const totalFills = summary
+    ? summary.buckets.reduce(
+        (sum, b) => sum + b.tradable.fills + b.untradable.fills,
+        0,
+      )
+    : 0
+
+  return {
+    lastDetectionDate,
+    lastPublishedAt,
+    ageHours,
+    detectionCountLastDay,
+    asOf: summary?.asOf ?? null,
+    bucketCount: summary?.bucketCount ?? 0,
+    totalFills,
+  }
+}
+
+// updatedAt on a pattern signal is a BSON Date (the publish wall-clock). Reuse
+// the same defensive Date→ISO handling the serializers use.
+function serializeSignalStamp(v: unknown): string | null {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.toISOString()
+  if (typeof v === 'string') return v
+  return null
 }
