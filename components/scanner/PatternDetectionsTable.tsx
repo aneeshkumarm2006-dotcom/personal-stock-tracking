@@ -94,7 +94,6 @@ export function PatternDetectionsTable({
             <TableHead className="text-right">SL</TableHead>
             <TableHead className="text-right">TP1</TableHead>
             <TableHead className="text-right">R:R</TableHead>
-            <TableHead>Flags</TableHead>
             <TableHead>Outcome</TableHead>
           </TableRow>
         </TableHeader>
@@ -145,23 +144,6 @@ export function PatternDetectionsTable({
                 </TableCell>
                 <TableCell className="text-muted-foreground text-right tabular-nums">
                   {d.rr != null ? d.rr.toFixed(2) : '—'}
-                </TableCell>
-                <TableCell>
-                  {d.flags.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {d.flags.map((f, i) => (
-                        <Badge
-                          key={`${d.id}-flag-${i}`}
-                          variant="outline"
-                          className="text-muted-foreground text-[10px]"
-                        >
-                          {f}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
                 </TableCell>
                 <TableCell>
                   <OutcomeCell position={d.position} />

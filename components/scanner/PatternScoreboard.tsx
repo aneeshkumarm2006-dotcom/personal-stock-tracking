@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils'
 import { formatCurrency, formatInt, pnlColorClass } from '@/lib/format'
 import { patternLabel, tierLabel, tierTone } from '@/lib/scanner/patternMeta'
 import { Badge } from '@/components/ui/badge'
-import { EmptyState } from '@/components/ui/empty-state'
 import {
   Table,
   TableBody,
@@ -32,11 +31,6 @@ function fmtPct(value: number | null | undefined): string {
 function fmtR(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return '—'
   return `${value.toFixed(2)}R`
-}
-
-function fmtRatio(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return '—'
-  return value.toFixed(2)
 }
 
 // Tier 2 buckets rank above Tier 4; within a tier, more fills first.
@@ -118,10 +112,17 @@ export function PatternScoreboard({
 
   if (!summary || summary.buckets.length === 0) {
     return (
-      <EmptyState
-        title="No pattern buckets yet"
-        description="Once the pattern paper engine advances its first fills, each detector's forward-test scoreboard appears here."
-      />
+      <div className="bg-muted/30 ring-foreground/10 rounded-lg px-4 py-3.5 ring-1">
+        <p className="text-sm font-medium">Scoreboard is still filling up</p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          A pattern only earns a row here once its first paper trade{' '}
+          <span className="text-foreground">enters and closes</span>. Detections
+          land daily (see below), but a pattern needs about{' '}
+          <span className="tabular-nums">{MIN_FILLS_FOR_VERDICT}</span>{' '}
+          closed trades before its win rate and P&amp;L mean anything — so this
+          settles over weeks, not days.
+        </p>
+      </div>
     )
   }
 
@@ -143,8 +144,9 @@ export function PatternScoreboard({
           </ToggleButton>
         </div>
         <p className="text-muted-foreground text-xs">
-          {formatInt(totalFills)} {cohort} fills across {summary.buckets.length}{' '}
-          buckets
+          {formatInt(totalFills)} {cohort} trades across{' '}
+          {summary.buckets.length} pattern
+          {summary.buckets.length === 1 ? '' : 's'}
           {summary.asOf ? ` · as of ${summary.asOf}` : ''}
         </p>
       </div>
@@ -154,11 +156,9 @@ export function PatternScoreboard({
           <TableHeader>
             <TableRow>
               <TableHead>Pattern</TableHead>
-              <TableHead className="text-right">Fills</TableHead>
+              <TableHead className="text-right">Trades</TableHead>
               <TableHead className="text-right">Win rate</TableHead>
-              <TableHead className="text-right">Expectancy</TableHead>
               <TableHead className="text-right">Avg R</TableHead>
-              <TableHead className="text-right">Profit factor</TableHead>
               <TableHead className="text-right">Net P&amp;L</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
@@ -207,23 +207,10 @@ export function PatternScoreboard({
                   <TableCell
                     className={cn(
                       'text-right tabular-nums',
-                      pnlColorClass(block.expectancy),
-                    )}
-                  >
-                    {block.expectancy != null
-                      ? formatCurrency(block.expectancy)
-                      : '—'}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      'text-right tabular-nums',
                       pnlColorClass(block.avgR),
                     )}
                   >
                     {fmtR(block.avgR)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {fmtRatio(block.profitFactor)}
                   </TableCell>
                   <TableCell
                     className={cn(
@@ -244,10 +231,11 @@ export function PatternScoreboard({
       </div>
 
       <p className="text-muted-foreground text-xs">
-        A bucket earns a keep/tune/kill verdict at ~{MIN_FILLS_FOR_VERDICT}+ fills
-        (§3). Tradable and untradable (illiquid / ASM / GSM / T2T) cohorts are
-        never pooled — switch the toggle to inspect the unfillable long tail
-        separately. Win rate / expectancy / avg R are over closed trades only.
+        A pattern earns a keep / tune / kill verdict once it reaches ~
+        {MIN_FILLS_FOR_VERDICT} closed trades. Win rate, expectancy and avg R
+        count closed trades only. Tradable and untradable names (illiquid, or
+        under NSE surveillance / trade-to-trade rules) are never mixed — flip the
+        toggle to inspect the untradable long tail on its own.
       </p>
     </div>
   )

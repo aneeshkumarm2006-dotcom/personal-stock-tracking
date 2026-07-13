@@ -122,38 +122,35 @@ function ArmCard({
         <span className="text-muted-foreground text-xs">{target}</span>
       </div>
       <p className="text-muted-foreground mt-1 text-xs">{blurb}</p>
-      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+      <div className="mt-3 space-y-3">
         <div>
-          <p className="text-muted-foreground text-xs">Net P&amp;L</p>
-          <p className={cn('font-medium tabular-nums', pnlCls(stats.netPnl))}>
+          <p className="text-muted-foreground text-xs">Net profit / loss</p>
+          <p
+            className={cn(
+              'text-xl font-semibold tabular-nums',
+              pnlCls(stats.netPnl),
+            )}
+          >
             {formatCurrency(stats.netPnl)}
           </p>
         </div>
-        <div>
-          <p className="text-muted-foreground text-xs">Equity</p>
-          <p className="font-medium tabular-nums">
-            {formatCurrency(stats.equity)}
-          </p>
+        <div className="grid grid-cols-2 gap-x-4 text-sm">
+          <div>
+            <p className="text-muted-foreground text-xs">Trades · wins</p>
+            <p className="tabular-nums">
+              {stats.trades} · {stats.wins}
+              {stats.winRate != null && (
+                <span className="text-muted-foreground"> ({stats.winRate}%)</span>
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs">Avg R</p>
+            <p className={cn('tabular-nums', pnlCls(stats.avgR))}>
+              {stats.avgR != null ? `${stats.avgR}R` : '—'}
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-muted-foreground text-xs">Trades · wins</p>
-          <p className="tabular-nums">
-            {stats.trades} · {stats.wins}
-            {stats.winRate != null && (
-              <span className="text-muted-foreground"> ({stats.winRate}%)</span>
-            )}
-          </p>
-        </div>
-        <div>
-          <p className="text-muted-foreground text-xs">Avg R</p>
-          <p className={cn('tabular-nums', pnlCls(stats.avgR))}>
-            {stats.avgR != null ? `${stats.avgR}R` : '—'}
-          </p>
-        </div>
-      </div>
-      <div className="text-muted-foreground mt-3 flex justify-between border-t pt-2 text-xs tabular-nums">
-        <span>Gross {formatCurrency(stats.grossPnl)}</span>
-        <span>Costs {formatCurrency(stats.costs)}</span>
       </div>
     </div>
   )
@@ -193,10 +190,6 @@ function PickDetail({ armRows }: { armRows: IntradayTrade[] }) {
   const base = armRows[0]
   if (!base) return null
   const long = base.direction === 'long'
-  const rPerShare =
-    base.entry != null && base.stop != null
-      ? Math.abs(base.entry - base.stop)
-      : null
   const arms = ['A', 'B']
     .map((k) => armRows.find((r) => r.arm === k))
     .filter(Boolean) as IntradayTrade[]
@@ -230,11 +223,7 @@ function PickDetail({ armRows }: { armRows: IntradayTrade[] }) {
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-sm sm:grid-cols-6">
-        <LevelChip
-          label={long ? 'Trigger' : 'Trigger'}
-          value={base.trigger != null ? formatCurrency(base.trigger) : '—'}
-        />
+      <div className="grid grid-cols-3 gap-2 text-sm">
         <LevelChip
           label="Entry"
           value={base.entry != null ? formatCurrency(base.entry) : '—'}
@@ -247,18 +236,6 @@ function PickDetail({ armRows }: { armRows: IntradayTrade[] }) {
         <LevelChip
           label="Qty"
           value={base.qty != null ? String(base.qty) : '—'}
-        />
-        <LevelChip
-          label="Risk/sh"
-          value={rPerShare != null ? formatCurrency(rPerShare) : '—'}
-        />
-        <LevelChip
-          label="Notional"
-          value={
-            base.entry != null && base.qty != null
-              ? formatCurrency(base.entry * base.qty)
-              : '—'
-          }
         />
       </div>
 
@@ -383,33 +360,40 @@ function LatestReplay({
       )}
 
       {(hasRanking || hasFunnel) && (
-        <div className="grid gap-5 border-t pt-4 lg:grid-cols-2">
-          {hasRanking && (
-            <div className="space-y-2">
-              <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                Sector ranking · 9:20 → 9:25
-              </p>
-              <SectorRankingTable
-                sectorTable={run.sectorTable!}
-                chosenKey={run.sector}
-                direction={run.direction}
-              />
-            </div>
-          )}
-          {hasFunnel && (
-            <div className="space-y-2">
-              <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                Candidate funnel
-              </p>
-              <CandidateFunnel
-                sectorName={chosenName}
-                direction={run.direction}
-                picks={run.picks ?? []}
-                rejects={run.rejects ?? []}
-              />
-            </div>
-          )}
-        </div>
+        <details className="group border-t pt-3">
+          <summary className="text-muted-foreground hover:text-foreground cursor-pointer list-none text-xs font-medium">
+            <span className="group-open:hidden">▸ </span>
+            <span className="hidden group-open:inline">▾ </span>
+            Why this pick — how the morning ranked
+          </summary>
+          <div className="mt-4 grid gap-5 lg:grid-cols-2">
+            {hasRanking && (
+              <div className="space-y-2">
+                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                  Sector ranking · 9:20 → 9:25
+                </p>
+                <SectorRankingTable
+                  sectorTable={run.sectorTable!}
+                  chosenKey={run.sector}
+                  direction={run.direction}
+                />
+              </div>
+            )}
+            {hasFunnel && (
+              <div className="space-y-2">
+                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                  Candidate funnel
+                </p>
+                <CandidateFunnel
+                  sectorName={chosenName}
+                  direction={run.direction}
+                  picks={run.picks ?? []}
+                  rejects={run.rejects ?? []}
+                />
+              </div>
+            )}
+          </div>
+        </details>
       )}
 
       {run.warnings && run.warnings.length > 0 && (
@@ -491,16 +475,12 @@ function PicksTable({ trades }: { trades: IntradayTrade[] }) {
   const thr = 'px-3 py-2 text-right font-medium'
   return (
     <div className="bg-card ring-foreground/10 overflow-x-auto rounded-xl ring-1">
-      <table className="w-full min-w-[760px] text-sm">
+      <table className="w-full min-w-[440px] text-sm">
         <thead>
           <tr className="text-muted-foreground border-b text-left text-xs">
             <th className={th}>Date</th>
             <th className={th}>Stock</th>
             <th className={th}>Dir</th>
-            <th className={thr}>9:25%</th>
-            <th className={thr}>RV</th>
-            <th className={thr}>Entry</th>
-            <th className={thr}>Stop</th>
             <th className={thr}>Arm A · 1:1.5</th>
             <th className={thr}>Arm B · 1:2</th>
           </tr>
@@ -534,29 +514,6 @@ function PicksTable({ trades }: { trades: IntradayTrade[] }) {
                   >
                     {base.direction}
                   </Badge>
-                </td>
-                <td
-                  className={cn(
-                    'px-3 py-2 text-right tabular-nums',
-                    pnlCls(base.pct925),
-                  )}
-                >
-                  {base.pct925 != null ? formatPercent(base.pct925) : '—'}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {base.rv != null ? `${base.rv}×` : '—'}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {base.entry != null ? formatCurrency(base.entry) : '—'}
-                  {base.entryTime && (
-                    <span className="text-muted-foreground text-xs">
-                      {' '}
-                      {base.entryTime}
-                    </span>
-                  )}
-                </td>
-                <td className="text-loss px-3 py-2 text-right tabular-nums">
-                  {base.stop != null ? formatCurrency(base.stop) : '—'}
                 </td>
                 <td className="px-3 py-2 text-right">
                   <ArmResult trade={a} />

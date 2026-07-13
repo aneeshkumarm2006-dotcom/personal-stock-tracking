@@ -8,6 +8,7 @@ import {
   tierLabel,
   tierTone,
   qualityComponentLabel,
+  flagLabel,
 } from '@/lib/scanner/patternMeta'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -212,9 +213,10 @@ export default async function PatternSignalPage({ params }: RouteContext) {
                     <Badge
                       key={`flag-${i}`}
                       variant="outline"
+                      title={f}
                       className="text-muted-foreground text-xs"
                     >
-                      {f}
+                      {flagLabel(f)}
                     </Badge>
                   ))}
                 </div>

@@ -80,3 +80,32 @@ export const QUALITY_COMPONENT_LABELS: Record<string, string> = {
 export function qualityComponentLabel(key: string): string {
   return QUALITY_COMPONENT_LABELS[key] ?? key
 }
+
+// Plain-language names for the descriptive tags a detector stamps on a detection
+// (contracts.py `flags`). These are power-user annotations by nature; the map
+// covers the tags that actually publish (tier-2/4 detectors + tradability), and
+// anything unknown falls through to a de-slugified label so it still reads.
+export const FLAG_LABELS: Record<string, string> = {
+  'overlaps-rsi-mr': 'Also an RSI dip-buy setup',
+  'overlaps-pullback': 'Also a pullback setup',
+  'vdu-handle': 'Volume dried up in the handle',
+  'rs-vol-contract': 'Volume contracted into the right shoulder',
+  'fragile-fit': 'Shape fit is unstable',
+  'dedupe-rectangle': 'De-duplicated against a rectangle',
+  'nse-guard': 'Passed the extra NSE safety check',
+  eve: 'Eve bottom (rounded)',
+  adam: 'Adam bottom (sharp)',
+  untradable: 'Untradable',
+}
+
+export function flagLabel(flag: string): string {
+  if (FLAG_LABELS[flag]) return FLAG_LABELS[flag]
+  // Structured "key:value" tags (e.g. `series:BE`, `suppressed:distribution_veto`)
+  // and plain slugs both de-slugify to something readable.
+  const [head = flag, ...rest] = flag.split(':')
+  const value = rest.join(' ').replace(/[-_]/g, ' ')
+  const humanized = head
+    .replace(/[-_]/g, ' ')
+    .replace(/^\w/, (c) => c.toUpperCase())
+  return value ? `${humanized} ${value}` : humanized
+}
