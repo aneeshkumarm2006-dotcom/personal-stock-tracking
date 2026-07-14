@@ -43,6 +43,20 @@ export function tierLabel(tier: string | null | undefined): string | null {
   return TIER_LABELS[tier] ?? tier
 }
 
+// Plain-language tier names for the tab UI — "Tier 2" means nothing to a
+// non-quant. Tier 2 detectors are the researched strong setups; tier 4 are the
+// expected-weak ones tracked mainly to prove whether they work at all.
+export const TIER_PLAIN_LABELS: Record<string, string> = {
+  tier2: 'Strong bet',
+  tier3: 'Veto',
+  tier4: 'Long shot',
+}
+
+export function tierPlainLabel(tier: string | null | undefined): string | null {
+  if (!tier) return null
+  return TIER_PLAIN_LABELS[tier] ?? tierLabel(tier)
+}
+
 // Tier 2 = expected-strong, Tier 4 = expected-weak (falsification candidates).
 export function tierTone(tier: string | null | undefined): string {
   switch (tier) {

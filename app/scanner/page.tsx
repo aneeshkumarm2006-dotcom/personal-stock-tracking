@@ -1,8 +1,10 @@
 import Link from 'next/link'
 
 import {
+  getIntradayLive,
   getIntradayOverview,
   getOverview,
+  getPatternsHealth,
   getPatternsOverview,
 } from '@/lib/scanner/queries'
 import { formatInt, formatIstDate } from '@/lib/format'
@@ -135,17 +137,20 @@ function SwingTab({ data }: { data: Awaited<ReturnType<typeof getOverview>> }) {
 }
 
 export default async function ScannerOverviewPage() {
-  const [data, intraday, patterns] = await Promise.all([
-    getOverview(),
-    getIntradayOverview(),
-    getPatternsOverview(),
-  ])
+  const [data, intraday, patterns, patternHealth, intradayLive] =
+    await Promise.all([
+      getOverview(),
+      getIntradayOverview(),
+      getPatternsOverview(),
+      getPatternsHealth(),
+      getIntradayLive(),
+    ])
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
         title="Scanner"
-        description="Forward-test performance of the scanner — swing setups, intraday signals and chart patterns."
+        description="The forward-test cockpit — is each engine running, what did it decide today, and is it making money."
       />
 
       <Tabs defaultValue="swing">
@@ -158,10 +163,10 @@ export default async function ScannerOverviewPage() {
           <SwingTab data={data} />
         </TabsContent>
         <TabsContent value="intraday" className="pt-4">
-          <IntradayTab data={intraday} />
+          <IntradayTab data={intraday} initialLive={intradayLive} />
         </TabsContent>
         <TabsContent value="patterns" className="pt-4">
-          <PatternsTab data={patterns} />
+          <PatternsTab data={patterns} health={patternHealth} />
         </TabsContent>
       </Tabs>
     </div>

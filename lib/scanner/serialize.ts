@@ -255,6 +255,7 @@ export function serializeSettings(raw: Raw): ScannerSettings {
 // ── Intraday replay serializers ─────────────────────────────────────────────
 
 import type {
+  IntradayLiveDoc,
   IntradayPick,
   IntradayReject,
   IntradayRun,
@@ -336,6 +337,48 @@ export function serializeIntradayTrade(doc: Raw): IntradayTrade {
     netPnl: doc.netPnl ?? null,
     rMultiple: doc.rMultiple ?? null,
     skipReason: doc.skipReason ?? null,
+  }
+}
+
+// The live-session doc (scannerIntradayLive, _id = session date). `plan` and
+// `live` are Python-written plain JSON (numbers + "HH:MM" strings) and pass
+// through untouched; only the identity/stamp fields are normalized.
+export function serializeIntradayLive(doc: Raw): IntradayLiveDoc {
+  const d = doc ?? {}
+  const live = d.live && typeof d.live === 'object' ? { ...d.live } : null
+  if (live) live.events = Array.isArray(live.events) ? live.events : []
+  return {
+    id: toId(d._id),
+    date: d.date ?? toId(d._id),
+    phase: d.phase ?? 'starting',
+    sector: d.sector ?? null,
+    direction: d.direction ?? null,
+    noTradeReason: d.noTradeReason ?? null,
+    plan: d.plan && typeof d.plan === 'object' ? d.plan : null,
+    live,
+    sectorTable: Array.isArray(d.sectorTable)
+      ? d.sectorTable.map(serializeIntradaySectorRow)
+      : [],
+    picks: Array.isArray(d.picks)
+      ? d.picks.map(
+          (p: Raw): IntradayPick => ({
+            symbol: String(p.symbol ?? ''),
+            pct925: num(p.pct925),
+            rv: num(p.rv),
+          }),
+        )
+      : [],
+    rejects: Array.isArray(d.rejects)
+      ? d.rejects.map(
+          (r: Raw): IntradayReject => ({
+            symbol: String(r.symbol ?? ''),
+            reason: String(r.reason ?? 'rejected'),
+            pct925: num(r.pct925),
+          }),
+        )
+      : [],
+    warnings: Array.isArray(d.warnings) ? d.warnings.map(String) : [],
+    updatedAt: toISO(d.updatedAt),
   }
 }
 

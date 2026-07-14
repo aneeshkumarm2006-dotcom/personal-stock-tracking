@@ -382,6 +382,65 @@ export type IntradayOverview = {
   recentTrades: IntradayTrade[]
 }
 
+// ── Intraday LIVE session (scannerIntradayLive, _id = session date) ──────────
+// The Python live runner upserts the full session state on every transition plus
+// a 30s heartbeat; the site polls it through /api/scanner/intraday/live. Shapes
+// are what live.py/publish_live write — times are "HH:MM[:SS]" IST strings.
+
+export type IntradayLiveArm = {
+  target: number
+  status: string // 'OPEN' | 'CLOSED'
+  exitPrice: number | null
+  exitTime: string | null
+  exitReason: string | null
+  grossPnl?: number
+  costs?: number
+  netPnl?: number
+  rMultiple?: number | null
+}
+
+export type IntradayLiveState = {
+  symbol: string
+  direction: string
+  status: string // ARMED | ENTERED | DONE | SKIPPED
+  trigger: number
+  stop: number
+  qty: number
+  rPerShare?: number
+  entryTime: string | null
+  entryPrice: number | null
+  lastLtp: number | null
+  lastLtpTime: string | null
+  skipReason: string | null
+  arms: Record<string, IntradayLiveArm>
+  events: { time: string; type: string; detail: string }[]
+}
+
+export type IntradayLivePlan = {
+  symbol: string
+  rv?: number | null
+  pct925?: number | null
+  trigger?: number
+  stop?: number
+  qty?: number
+}
+
+export type IntradayLiveDoc = {
+  id: string
+  date: string
+  phase: string // starting | setup | ranking-0920 | decided | live | done
+  sector?: string | null
+  direction?: string | null
+  noTradeReason?: string | null
+  plan?: IntradayLivePlan | null
+  live?: IntradayLiveState | null
+  sectorTable?: IntradaySectorRow[]
+  picks?: IntradayPick[]
+  rejects?: IntradayReject[]
+  warnings?: string[]
+  updatedAt?: string | null
+}
+
 // ── Chart patterns (Phase 11) — the 3rd `/scanner` tab ──────────────────────
 // Detections are `scannerSignals`/`scannerPositions` docs tagged family='pattern'
 // (D-1 reuse). The per-bucket forward-test scoreboard is its OWN collection,

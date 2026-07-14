@@ -371,13 +371,15 @@ import {
   ScannerIntradayRunModel,
   ScannerIntradayTradeModel,
   ScannerIntradayStatsModel,
+  ScannerIntradayLiveModel,
 } from './models'
 import {
   serializeIntradayRun,
   serializeIntradayTrade,
   serializeIntradaySummary,
+  serializeIntradayLive,
 } from './serialize'
-import type { IntradayOverview } from './types'
+import type { IntradayOverview, IntradayLiveDoc } from './types'
 
 export async function getIntradayOverview(): Promise<IntradayOverview> {
   await connectDB()
@@ -395,6 +397,18 @@ export async function getIntradayOverview(): Promise<IntradayOverview> {
     recentRuns: (runDocs ?? []).map(serializeIntradayRun),
     recentTrades: (tradeDocs ?? []).map(serializeIntradayTrade),
   }
+}
+
+// Latest live-session doc (the Python live runner upserts _id = session date).
+// Used server-side to seed the tab's "Right now" section, and by the polled
+// /api/scanner/intraday/live route.
+export async function getIntradayLive(): Promise<IntradayLiveDoc | null> {
+  await connectDB()
+  const doc = await ScannerIntradayLiveModel.findOne({})
+    .sort({ _id: -1 })
+    .lean<Raw>()
+    .exec()
+  return doc ? serializeIntradayLive(doc) : null
 }
 
 // ── Chart patterns (Phase 11) — the 3rd `/scanner` tab ──────────────────────

@@ -2,7 +2,12 @@ import Link from 'next/link'
 
 import { cn } from '@/lib/utils'
 import { formatCurrency, pnlColorClass } from '@/lib/format'
-import { patternLabel, tierLabel, tierTone } from '@/lib/scanner/patternMeta'
+import {
+  patternLabel,
+  tierLabel,
+  tierPlainLabel,
+  tierTone,
+} from '@/lib/scanner/patternMeta'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import {
@@ -82,24 +87,32 @@ export function PatternDetectionsTable({
     )
   }
 
+  // Tradable names first (the ones a human could act on), best shape first.
+  const rows = [...detections].sort((a, b) => {
+    if (a.tradable !== b.tradable) return a.tradable ? -1 : 1
+    return (b.quality ?? 0) - (a.quality ?? 0)
+  })
+
   return (
     <div className="overflow-hidden rounded-lg border">
       <Table containerClassName="thin-scrollbar">
         <TableHeader>
           <TableRow>
-            <TableHead>Symbol</TableHead>
+            <TableHead>Stock</TableHead>
             <TableHead>Pattern</TableHead>
             <TableHead className="text-right">Quality</TableHead>
-            <TableHead className="text-right">Buy</TableHead>
-            <TableHead className="text-right">SL</TableHead>
-            <TableHead className="text-right">TP1</TableHead>
-            <TableHead className="text-right">R:R</TableHead>
-            <TableHead>Outcome</TableHead>
+            <TableHead className="text-right">Buy above</TableHead>
+            <TableHead className="text-right">Stop</TableHead>
+            <TableHead className="text-right">Target</TableHead>
+            <TableHead className="text-right" title="reward ÷ risk">
+              R:R
+            </TableHead>
+            <TableHead>Result</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {detections.map((d) => {
-            const tl = tierLabel(d.tier)
+          {rows.map((d) => {
+            const tl = tierPlainLabel(d.tier)
             return (
               <TableRow key={d.id}>
                 <TableCell className="font-medium">
@@ -124,6 +137,7 @@ export function PatternDetectionsTable({
                           'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
                           tierTone(d.tier),
                         )}
+                        title={tierLabel(d.tier) ?? undefined}
                       >
                         {tl}
                       </span>

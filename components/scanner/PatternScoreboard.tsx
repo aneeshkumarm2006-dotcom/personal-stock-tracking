@@ -4,7 +4,12 @@ import { useMemo, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatInt, pnlColorClass } from '@/lib/format'
-import { patternLabel, tierLabel, tierTone } from '@/lib/scanner/patternMeta'
+import {
+  patternLabel,
+  tierLabel,
+  tierPlainLabel,
+  tierTone,
+} from '@/lib/scanner/patternMeta'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -165,7 +170,7 @@ export function PatternScoreboard({
           </TableHeader>
           <TableBody>
             {rows.map(({ bucket, block }) => {
-              const tl = tierLabel(bucket.tier)
+              const tl = tierPlainLabel(bucket.tier)
               return (
                 <TableRow key={bucket.key}>
                   <TableCell>
@@ -179,23 +184,23 @@ export function PatternScoreboard({
                             'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
                             tierTone(bucket.tier),
                           )}
+                          title={tierLabel(bucket.tier) ?? undefined}
                         >
                           {tl}
                         </span>
                       ) : null}
-                    </div>
-                    <div className="text-muted-foreground font-mono text-[11px]">
-                      {bucket.key}
                     </div>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {block.fills > 0 ? (
                       <span>
                         {formatInt(block.fills)}
-                        <span className="text-muted-foreground text-xs">
-                          {' '}
-                          ({block.closedTrades}c/{block.openTrades}o)
-                        </span>
+                        {block.openTrades > 0 ? (
+                          <span className="text-muted-foreground text-xs">
+                            {' '}
+                            · {block.openTrades} open
+                          </span>
+                        ) : null}
                       </span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
@@ -231,11 +236,9 @@ export function PatternScoreboard({
       </div>
 
       <p className="text-muted-foreground text-xs">
-        A pattern earns a keep / tune / kill verdict once it reaches ~
-        {MIN_FILLS_FOR_VERDICT} closed trades. Win rate, expectancy and avg R
-        count closed trades only. Tradable and untradable names (illiquid, or
-        under NSE surveillance / trade-to-trade rules) are never mixed — flip the
-        toggle to inspect the untradable long tail on its own.
+        Win rate and Avg R count closed trades only. A pattern gets its
+        keep-or-kill verdict at ~{MIN_FILLS_FOR_VERDICT} closed trades —
+        until then, treat the numbers as noise.
       </p>
     </div>
   )
