@@ -379,11 +379,33 @@ import {
   serializeIntradaySummary,
   serializeIntradayLive,
 } from './serialize'
-import type { IntradayOverview, IntradayLiveDoc } from './types'
+import type {
+  IntradayOverview,
+  IntradayDailyPoint,
+  IntradayLiveDoc,
+} from './types'
+
+// Cumulative per-arm equity, one point per recorded session (the intraday
+// pipeline publishes no daily-stats collection, so the curve is derived from
+// the run docs' dayPnl fields). No-trade/failed sessions carry equity flat.
+function buildIntradayDaily(runs: Raw[], capital: number): IntradayDailyPoint[] {
+  let equityA = capital
+  let equityB = capital
+  const points: IntradayDailyPoint[] = []
+  for (const r of runs) {
+    if (!r || typeof r.date !== 'string' || !r.date) continue
+    const dayPnlA = typeof r.dayPnlA === 'number' ? r.dayPnlA : 0
+    const dayPnlB = typeof r.dayPnlB === 'number' ? r.dayPnlB : 0
+    equityA += dayPnlA
+    equityB += dayPnlB
+    points.push({ date: r.date, dayPnlA, dayPnlB, equityA, equityB })
+  }
+  return points
+}
 
 export async function getIntradayOverview(): Promise<IntradayOverview> {
   await connectDB()
-  const [summaryDoc, runDocs, tradeDocs] = await Promise.all([
+  const [summaryDoc, runDocs, tradeDocs, allRunDocs] = await Promise.all([
     ScannerIntradayStatsModel.findById('summary').lean<Raw>().exec(),
     ScannerIntradayRunModel.find({}).sort({ date: -1 }).limit(10).lean<Raw[]>().exec(),
     ScannerIntradayTradeModel.find({})
@@ -391,11 +413,18 @@ export async function getIntradayOverview(): Promise<IntradayOverview> {
       .limit(60)
       .lean<Raw[]>()
       .exec(),
+    // Every session, oldest first, dayPnl fields only — feeds the equity curve.
+    ScannerIntradayRunModel.find({}, { date: 1, dayPnlA: 1, dayPnlB: 1 })
+      .sort({ date: 1 })
+      .lean<Raw[]>()
+      .exec(),
   ])
+  const summary = summaryDoc ? serializeIntradaySummary(summaryDoc) : null
   return {
-    summary: summaryDoc ? serializeIntradaySummary(summaryDoc) : null,
+    summary,
     recentRuns: (runDocs ?? []).map(serializeIntradayRun),
     recentTrades: (tradeDocs ?? []).map(serializeIntradayTrade),
+    daily: summary ? buildIntradayDaily(allRunDocs ?? [], summary.capital) : [],
   }
 }
 
@@ -428,9 +457,35 @@ import type {
   PatternDetectionRow,
   PatternSignalView,
   PatternHealth,
+  ScannerDailyStat,
 } from './types'
 
 const IS_PATTERN = { family: 'pattern' }
+
+// Realized paper equity by exit date, derived from the closed pattern positions
+// (patterns publish no daily-stats collection). Shaped as ScannerDailyStat so
+// the tab reuses the swing equity chart unchanged; drawdown is the running
+// peak-minus-equity of this realized curve.
+function buildPatternDaily(
+  positions: ScannerPosition[],
+  capital: number,
+): ScannerDailyStat[] {
+  const pnlByDate = new Map<string, number>()
+  for (const p of positions) {
+    if (p.status !== 'CLOSED' || !p.exitDate) continue
+    pnlByDate.set(p.exitDate, (pnlByDate.get(p.exitDate) ?? 0) + (p.netPnl ?? 0))
+  }
+  const dates = [...pnlByDate.keys()].sort()
+  let equity = capital
+  let peak = capital
+  let maxDrawdown = 0
+  return dates.map((date) => {
+    equity += pnlByDate.get(date) ?? 0
+    peak = Math.max(peak, equity)
+    maxDrawdown = Math.max(maxDrawdown, peak - equity)
+    return { id: date, date, equity, maxDrawdownToDate: maxDrawdown }
+  })
+}
 
 // Batch-load the paper positions for a set of detections and stitch each
 // detection to its outcome (positionId == signal _id for patterns).
@@ -471,7 +526,7 @@ export async function getPatternDay(date: string): Promise<PatternDay> {
 
 export async function getPatternsOverview(): Promise<PatternsOverview> {
   await connectDB()
-  const [summaryDoc, dayCounts] = await Promise.all([
+  const [summaryDoc, dayCounts, positionDocs] = await Promise.all([
     ScannerPatternStatsModel.findById('summary').lean<Raw>().exec(),
     // Per-day detection counts (lightweight) for the recent-days strip.
     ScannerSignalModel.aggregate([
@@ -488,6 +543,9 @@ export async function getPatternsOverview(): Promise<PatternsOverview> {
       { $sort: { _id: -1 } },
       { $limit: 15 },
     ]).exec(),
+    // Every pattern paper position — the Trade levels table + the derived
+    // realized-equity curve both read from this.
+    ScannerPositionModel.find({ ...IS_PATTERN }).lean<Raw[]>().exec(),
   ])
 
   const recentDays: PatternDayCount[] = (dayCounts ?? [])
@@ -505,12 +563,17 @@ export async function getPatternsOverview(): Promise<PatternsOverview> {
     ? await getPatternDay(lastDetectionDate)
     : null
 
+  const summary = summaryDoc ? serializePatternStats(summaryDoc) : null
+  const positions = (positionDocs ?? []).map(serializePosition)
+
   return {
-    summary: summaryDoc ? serializePatternStats(summaryDoc) : null,
+    summary,
     latestDay,
     recentDays,
     lastDetectionDate,
     totalDetections: recentDays.reduce((sum, d) => sum + d.total, 0),
+    positions: sortPositionsForDisplay(positions),
+    daily: summary ? buildPatternDaily(positions, summary.capital) : [],
   }
 }
 

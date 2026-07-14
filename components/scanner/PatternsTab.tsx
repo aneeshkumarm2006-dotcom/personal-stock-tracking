@@ -1,6 +1,11 @@
 import Link from 'next/link'
 
-import { formatInt, formatIstDate, formatIstTime } from '@/lib/format'
+import {
+  formatCurrency,
+  formatInt,
+  formatIstDate,
+  formatIstTime,
+} from '@/lib/format'
 import {
   behindLevel,
   istTodayKey,
@@ -10,6 +15,9 @@ import {
 import { SectionHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusStrip, type StatusItem } from '@/components/scanner/StatusStrip'
+import { PatternStatCards } from '@/components/scanner/PatternStatCards'
+import { ScannerEquityChart } from '@/components/scanner/ScannerEquityChart'
+import { ScannerLevelsTable } from '@/components/scanner/ScannerLevelsTable'
 import { PatternScoreboard } from '@/components/scanner/PatternScoreboard'
 import { PatternDetectionsTable } from '@/components/scanner/PatternDetectionsTable'
 import type {
@@ -198,7 +206,7 @@ export function PatternsTab({
   data: PatternsOverview
   health: PatternHealth
 }) {
-  const { summary, latestDay, recentDays } = data
+  const { summary, latestDay, recentDays, daily, positions } = data
   const statusItems = buildStatusItems(health)
 
   return (
@@ -245,12 +253,49 @@ export function PatternsTab({
         )}
       </section>
 
+      {summary && (
+        <section className="space-y-3">
+          <SectionHeader
+            title="Is it making money?"
+            hint={`all patterns pooled, tradable names only — on ${formatCurrency(summary.capital)} of pretend capital`}
+          />
+          <PatternStatCards summary={summary} />
+        </section>
+      )}
+
+      {summary && (
+        <section className="space-y-3">
+          <SectionHeader
+            title="Equity curve"
+            hint="realized paper equity and max drawdown — moves as trades close"
+          />
+          {daily.length > 0 ? (
+            <div className="bg-card ring-foreground/10 rounded-xl p-4 ring-1">
+              <ScannerEquityChart daily={daily} />
+            </div>
+          ) : (
+            <EmptyState
+              title="No daily history yet"
+              description="The equity curve appears once the first paper trades close."
+            />
+          )}
+        </section>
+      )}
+
       <section className="space-y-3">
         <SectionHeader
           title="Which patterns make money"
           hint="the running verdict — settles as paper trades close"
         />
         <PatternScoreboard summary={summary} />
+      </section>
+
+      <section className="space-y-3">
+        <SectionHeader
+          title="Trade levels"
+          hint="entry, stop, targets and P&L per paper trade"
+        />
+        <ScannerLevelsTable positions={positions} />
       </section>
 
       {recentDays.length > 1 ? (

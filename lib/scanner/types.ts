@@ -376,10 +376,22 @@ export type IntradayTrade = {
   skipReason?: string | null
 }
 
+// One point per recorded session for the tab's equity curve — cumulative net
+// P&L per exit arm on top of the paper capital (computed on read from the run
+// docs; the intraday pipeline publishes no daily-stats collection).
+export type IntradayDailyPoint = {
+  date: string
+  dayPnlA: number
+  dayPnlB: number
+  equityA: number
+  equityB: number
+}
+
 export type IntradayOverview = {
   summary: IntradaySummary | null
   recentRuns: IntradayRun[]
   recentTrades: IntradayTrade[]
+  daily: IntradayDailyPoint[]
 }
 
 // ── Intraday LIVE session (scannerIntradayLive, _id = session date) ──────────
@@ -542,6 +554,12 @@ export type PatternsOverview = {
   recentDays: PatternDayCount[]
   lastDetectionDate: string | null
   totalDetections: number
+  // Every family='pattern' paper position (open first) for the Trade levels
+  // table, plus a realized-equity-by-exit-date series derived from the closed
+  // ones (patterns publish no daily-stats collection) — both so the tab can
+  // render the same equity curve + levels sections the swing tab has.
+  positions: ScannerPosition[]
+  daily: ScannerDailyStat[]
 }
 
 export type PatternSignalView = {

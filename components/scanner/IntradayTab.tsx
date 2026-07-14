@@ -5,6 +5,16 @@ import { formatCurrency, formatIstDate, formatPercent } from '@/lib/format'
 import { SectionHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { IntradayStatCards } from '@/components/scanner/IntradayStatCards'
+import { IntradayEquityChart } from '@/components/scanner/IntradayEquityChart'
 import { IntradayToday } from '@/components/scanner/IntradayToday'
 import {
   SectorRankingTable,
@@ -27,67 +37,86 @@ function pnlCls(v: number | null | undefined) {
   return v > 0 ? 'text-gain' : 'text-loss'
 }
 
-// ── cumulative per-arm scoreboard ───────────────────────────────────────────
-function ArmCard({
-  arm,
-  blurb,
-  ahead,
-  stats,
+// ── per-exit breakdown — the intraday twin of the swing "By strategy" table ──
+function ByExitTable({
+  summary,
 }: {
-  arm: string
-  blurb: string
-  ahead?: boolean
-  stats: NonNullable<IntradayOverview['summary']>['byArm']['A']
+  summary: NonNullable<IntradayOverview['summary']>
 }) {
+  const rows = [
+    {
+      key: 'A',
+      blurb: 'books profit at 1.5× the risk — safer, wins more often',
+      stats: summary.byArm.A,
+    },
+    {
+      key: 'B',
+      blurb: 'holds out for 2× the risk — greedier, bigger wins',
+      stats: summary.byArm.B,
+    },
+  ]
+  const diff = summary.byArm.B.netPnl - summary.byArm.A.netPnl
+  const traded = Math.max(summary.byArm.A.trades, summary.byArm.B.trades) > 0
+  const leader = !traded || diff === 0 ? null : diff > 0 ? 'B' : 'A'
+
   return (
-    <div
-      className={cn(
-        'bg-card ring-foreground/10 rounded-xl p-4 ring-1',
-        ahead && 'ring-gain/40 ring-2',
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold">Exit {arm}</p>
-        {ahead && (
-          <span className="bg-gain/10 text-gain rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase">
-            winning
-          </span>
-        )}
-      </div>
-      <p className="text-muted-foreground mt-1 text-xs">{blurb}</p>
-      <div className="mt-3 space-y-3">
-        <div>
-          <p className="text-muted-foreground text-xs">Net profit / loss</p>
-          <p
-            className={cn(
-              'text-xl font-semibold tabular-nums',
-              pnlCls(stats.netPnl),
-            )}
-          >
-            {formatCurrency(stats.netPnl)}
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-x-4 text-sm">
-          <div>
-            <p className="text-muted-foreground text-xs">Trades · wins</p>
-            <p className="tabular-nums">
-              {stats.trades} · {stats.wins}
-              {stats.winRate != null && (
-                <span className="text-muted-foreground">
-                  {' '}
-                  ({stats.winRate}%)
-                </span>
-              )}
-            </p>
-          </div>
-          <div>
-            <p className="text-muted-foreground text-xs">Avg R</p>
-            <p className={cn('tabular-nums', pnlCls(stats.avgR))}>
-              {stats.avgR != null ? `${stats.avgR}R` : '—'}
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="overflow-hidden rounded-lg border">
+      <Table containerClassName="thin-scrollbar">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Exit</TableHead>
+            <TableHead className="text-right">Trades</TableHead>
+            <TableHead className="text-right">Wins</TableHead>
+            <TableHead className="text-right">Win rate</TableHead>
+            <TableHead className="text-right">Avg R</TableHead>
+            <TableHead className="text-right">Gross</TableHead>
+            <TableHead className="text-right">Costs</TableHead>
+            <TableHead className="text-right">Net P&amp;L</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map(({ key, blurb, stats }) => (
+            <TableRow key={key}>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Exit {key}</span>
+                  {leader === key && (
+                    <span className="bg-gain/10 text-gain rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase">
+                      winning
+                    </span>
+                  )}
+                </div>
+                <div className="text-muted-foreground text-xs">{blurb}</div>
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {stats.trades}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {stats.wins}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {stats.winRate != null ? `${stats.winRate}%` : '—'}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {stats.avgR != null ? `${stats.avgR}R` : '—'}
+              </TableCell>
+              <TableCell
+                className={cn('text-right tabular-nums', pnlCls(stats.grossPnl))}
+              >
+                {formatCurrency(stats.grossPnl)}
+              </TableCell>
+              <TableCell className="text-muted-foreground text-right tabular-nums">
+                {formatCurrency(stats.costs)}
+              </TableCell>
+              <TableCell
+                className={cn('text-right tabular-nums', pnlCls(stats.netPnl))}
+              >
+                {formatCurrency(stats.netPnl)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -444,39 +473,37 @@ function PicksTable({ trades }: { trades: IntradayTrade[] }) {
       b: rows.find((r) => r.arm === 'B'),
     }))
     .sort((x, y) => y.base.date.localeCompare(x.base.date))
-  const th = 'px-3 py-2 font-medium'
-  const thr = 'px-3 py-2 text-right font-medium'
   return (
-    <div className="bg-card ring-foreground/10 overflow-x-auto rounded-xl ring-1">
-      <table className="w-full min-w-[440px] text-sm">
-        <thead>
-          <tr className="text-muted-foreground border-b text-left text-xs">
-            <th className={th}>Date</th>
-            <th className={th}>Stock</th>
-            <th className={th}>Side</th>
-            <th className={thr}>Exit A · 1.5×</th>
-            <th className={thr}>Exit B · 2×</th>
-          </tr>
-        </thead>
-        <tbody>
+    <div className="overflow-hidden rounded-lg border">
+      <Table containerClassName="thin-scrollbar">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead>Stock</TableHead>
+            <TableHead>Side</TableHead>
+            <TableHead className="text-right">Exit A · 1.5×</TableHead>
+            <TableHead className="text-right">Exit B · 2×</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {picks.map(({ base, a, b }) => {
             return (
-              <tr
+              <TableRow
                 key={`${base.date}__${base.symbol}`}
-                className="border-b align-top last:border-0"
+                className="align-top"
               >
-                <td className="px-3 py-2 whitespace-nowrap tabular-nums">
+                <TableCell className="whitespace-nowrap tabular-nums">
                   {formatIstDate(base.date)}
-                </td>
-                <td className="px-3 py-2">
+                </TableCell>
+                <TableCell>
                   <div className="font-medium">{base.symbol}</div>
                   {base.sector && (
                     <div className="text-muted-foreground text-xs">
                       {base.sector}
                     </div>
                   )}
-                </td>
-                <td className="px-3 py-2">
+                </TableCell>
+                <TableCell>
                   <Badge
                     className={cn(
                       'border-transparent',
@@ -487,18 +514,18 @@ function PicksTable({ trades }: { trades: IntradayTrade[] }) {
                   >
                     {base.direction}
                   </Badge>
-                </td>
-                <td className="px-3 py-2 text-right">
+                </TableCell>
+                <TableCell className="text-right">
                   <ArmResult trade={a} />
-                </td>
-                <td className="px-3 py-2 text-right">
+                </TableCell>
+                <TableCell className="text-right">
                   <ArmResult trade={b} />
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )
           })}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -691,17 +718,10 @@ export function IntradayTab({
   const summary = data?.summary ?? null
   const recentRuns = data?.recentRuns ?? []
   const recentTrades = data?.recentTrades ?? []
+  const daily = data?.daily ?? []
   const latest = recentRuns[0] ?? null
   const hasResults =
     recentRuns.length > 0 || (summary?.byArm.A.trades ?? 0) > 0
-  const leaderArm =
-    summary && Math.max(summary.byArm.A.trades, summary.byArm.B.trades) > 0
-      ? summary.byArm.B.netPnl > summary.byArm.A.netPnl
-        ? 'B'
-        : summary.byArm.A.netPnl > summary.byArm.B.netPnl
-          ? 'A'
-          : null
-      : null
 
   return (
     <div className="space-y-8">
@@ -721,20 +741,36 @@ export function IntradayTab({
             hint={`running total on ${formatCurrency(summary.capital)} of pretend capital`}
           />
           <ArmVerdict summary={summary} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ArmCard
-              arm="A"
-              blurb="Books profit at 1.5× the risk — safer, wins more often."
-              ahead={leaderArm === 'A'}
-              stats={summary.byArm.A}
+          <IntradayStatCards summary={summary} />
+        </section>
+      )}
+
+      {summary && (
+        <section className="space-y-3">
+          <SectionHeader
+            title="Equity curve"
+            hint="both exits by session — the gap between the lines is the A/B verdict"
+          />
+          {daily.length > 0 ? (
+            <div className="bg-card ring-foreground/10 rounded-xl p-4 ring-1">
+              <IntradayEquityChart daily={daily} />
+            </div>
+          ) : (
+            <EmptyState
+              title="No daily history yet"
+              description="The equity curve appears after the first recorded session."
             />
-            <ArmCard
-              arm="B"
-              blurb="Holds out for 2× the risk — greedier, bigger wins."
-              ahead={leaderArm === 'B'}
-              stats={summary.byArm.B}
-            />
-          </div>
+          )}
+        </section>
+      )}
+
+      {summary && (
+        <section className="space-y-3">
+          <SectionHeader
+            title="By exit"
+            hint="the same trades closed two ways — stats per exit"
+          />
+          <ByExitTable summary={summary} />
         </section>
       )}
 
