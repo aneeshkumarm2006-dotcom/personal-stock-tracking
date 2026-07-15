@@ -1,18 +1,10 @@
 import { connectDB } from '@/lib/db/connect'
-import { CashAccount } from '@/lib/db/models/CashAccount'
-import { Transaction } from '@/lib/db/models/Transaction'
-import {
-  computeHoldings,
-  type TransactionForHoldings,
-} from '@/lib/portfolio/holdings'
-import { computeCash, computeNetInvested } from '@/lib/portfolio/cash'
-import { computeSummary } from '@/lib/portfolio/summary'
-import { loadSnapshotsForTokens } from '@/lib/prices/snapshots'
+import { loadHoldingsResponse } from '@/lib/portfolio/holdingsResponse'
+import { loadPortfolioSummary } from '@/lib/portfolio/summaryResponse'
 
 import { PageHeader, SectionHeader } from '@/components/PageHeader'
 import { PortfolioLivePrices } from '@/components/portfolio/PortfolioLivePrices'
-import { PortfolioSummaryCards } from '@/components/portfolio/PortfolioSummaryCards'
-import { CashCard } from '@/components/portfolio/CashCard'
+import { PortfolioSummaryStrip } from '@/components/portfolio/PortfolioSummaryStrip'
 import { HoldingsTable } from '@/components/portfolio/HoldingsTable'
 import { AddTransactionDialog } from '@/components/portfolio/AddTransactionDialog'
 import { TransactionHistoryTable } from '@/components/portfolio/TransactionHistoryTable'
@@ -24,22 +16,15 @@ export const dynamic = 'force-dynamic'
 export default async function PortfolioPage() {
   await connectDB()
 
-  const transactions = (await Transaction.find({})
-    .sort({ date: 1 })
-    .lean()) as unknown as TransactionForHoldings[]
-
-  const holdings = computeHoldings(transactions)
-  const tokens = holdings.map((h) => h.instrumentToken)
-  const snapshots = await loadSnapshotsForTokens(tokens)
-
-  const cashAccount = (await CashAccount.findOne({ key: 'default' }).lean()) as {
-    fundsAdded?: number
-  } | null
-  const summary = computeSummary(holdings, snapshots)
-  const cash = computeCash(
-    cashAccount?.fundsAdded ?? 0,
-    computeNetInvested(transactions),
-  )
+  // Compute the holdings and summary payloads once, server-side, and hand them
+  // to the client components as `initialData`. That way the first paint uses
+  // this render's data instead of firing an immediate refetch of the same work,
+  // and the live poller keeps them current afterward via query invalidation —
+  // no per-tick router.refresh() re-running the whole server component.
+  const [holdingsData, summaryData] = await Promise.all([
+    loadHoldingsResponse(),
+    loadPortfolioSummary(),
+  ])
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-8 px-4 py-6 sm:px-6 sm:py-8">
@@ -51,18 +36,16 @@ export default async function PortfolioPage() {
 
       <PortfolioLivePrices />
 
-      <PortfolioSummaryCards summary={summary} />
-
-      <CashCard cash={cash} />
+      <PortfolioSummaryStrip initialData={summaryData} />
 
       <section className="space-y-3">
         <SectionHeader title="Holdings" />
-        <HoldingsTable />
+        <HoldingsTable initialData={holdingsData} />
       </section>
 
       <section className="space-y-3">
         <SectionHeader title="Analytics" />
-        <PortfolioCharts />
+        <PortfolioCharts initialHoldings={holdingsData} />
       </section>
 
       <section className="space-y-3">

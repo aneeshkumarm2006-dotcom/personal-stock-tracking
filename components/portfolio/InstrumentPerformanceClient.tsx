@@ -1,16 +1,23 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useQuery } from '@tanstack/react-query'
 
 import { EmptyState, ErrorState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  PriceHistoryLine,
-  type PriceHistoryCandle,
-  type PriceHistoryMarker,
+import type {
+  PriceHistoryCandle,
+  PriceHistoryMarker,
 } from '@/components/charts/PriceHistoryLine'
 import { cn } from '@/lib/utils'
+
+// Defer the Recharts price chart off the route's critical path (see PortfolioCharts).
+const PriceHistoryLine = dynamic(
+  () =>
+    import('@/components/charts/PriceHistoryLine').then((m) => m.PriceHistoryLine),
+  { ssr: false, loading: () => <Skeleton className="h-[320px] w-full" /> },
+)
 
 type RangeKey = '1M' | '3M' | '6M' | '1Y'
 

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { formatIstTime } from '@/lib/format'
@@ -25,7 +24,6 @@ type RefreshOutcome = { rateLimited: boolean }
 // re-read the fresh prices too.
 export function PortfolioLivePrices() {
   const queryClient = useQueryClient()
-  const router = useRouter()
   const [open, setOpen] = useState<boolean>(() => isMarketOpen())
 
   // Re-check market hours each minute so the poller pauses itself at the close
@@ -49,10 +47,14 @@ export function PortfolioLivePrices() {
       if (res.status === 503) return { rateLimited: true }
       if (!res.ok) throw new Error(`Live refresh failed (${res.status})`)
 
-      // Holdings table reads the ['holdings'] query; the summary + cash cards are
-      // server-rendered, so refresh the route to pull their fresh values too.
-      await queryClient.invalidateQueries({ queryKey: ['holdings'] })
-      router.refresh()
+      // Holdings table reads ['holdings']; the summary + cash strip reads
+      // ['portfolioSummary']. Invalidating both pulls the fresh prices forward
+      // client-side — no router.refresh(), which used to re-run the entire
+      // server component (a second full holdings recompute) on every tick.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['holdings'] }),
+        queryClient.invalidateQueries({ queryKey: ['portfolioSummary'] }),
+      ])
       return { rateLimited: false }
     },
     // Only run while the market is open and the tab is in the foreground, so we

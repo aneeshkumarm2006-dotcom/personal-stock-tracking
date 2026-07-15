@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 
 import { Badge } from '@/components/ui/badge'
@@ -168,6 +169,7 @@ function IstAnalogClock() {
 
 export function MarketStatusBadge() {
   const [open, setOpen] = useState<boolean>(() => isMarketOpen())
+  const pathname = usePathname()
 
   useEffect(() => {
     const tick = () => setOpen(isMarketOpen())
@@ -176,10 +178,17 @@ export function MarketStatusBadge() {
     return () => clearInterval(id)
   }, [])
 
+  // The badge lives in the Nav on every page, but it only needs holdings for its
+  // day-direction tint and "updated" time — both portfolio-only cosmetics.
+  // Fetching ['holdings'] everywhere would run the full transaction→holdings
+  // recompute on Research/Scanner/Strategy/etc. On the portfolio pages this
+  // query is already loaded (deduped by key); elsewhere we skip it and fall back
+  // to a neutral badge, so no page pays for a recompute it doesn't use.
+  const onPortfolio = pathname?.startsWith('/portfolio') ?? false
   const lastUpdatedQuery = useQuery({
     queryKey: ['holdings'],
     queryFn: fetchHoldings,
-    staleTime: 30_000,
+    enabled: onPortfolio,
   })
 
   if (open) {

@@ -87,7 +87,10 @@ export function ManageCashDialog({ fundsAdded }: ManageCashDialogProps) {
         return
       }
       toast.success(isAdd ? `Added ${formatCurrency(num)}` : 'Cash updated')
-      await queryClient.invalidateQueries({ queryKey: ['cash'] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['cash'] }),
+        queryClient.invalidateQueries({ queryKey: ['portfolioSummary'] }),
+      ])
       router.refresh()
       setOpen(false)
     } catch {

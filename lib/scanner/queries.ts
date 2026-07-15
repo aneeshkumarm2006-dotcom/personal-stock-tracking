@@ -2,6 +2,8 @@
 // pulled into a 'use client' bundle. Every function connects first, reads with
 // .lean(), and returns already-serialized (client-safe) shapes from types.ts.
 
+import { unstable_cache } from 'next/cache'
+
 import { connectDB } from '@/lib/db/connect'
 import {
   ScannerRunModel,
@@ -44,7 +46,11 @@ type Raw = Record<string, any>
 // no run/daily docs — so they need no filter.)
 const NOT_PATTERN = { family: { $ne: 'pattern' } }
 
-export async function getOverview(): Promise<OverviewData> {
+// Full-collection read + in-JS rollup. The scanner data is written out-of-band
+// by the Python pipeline, so Next can't be told to revalidate on write — cache
+// the result for a short window instead (getOverview below). A revisit within
+// the window skips the Mongo read and the aggregation entirely.
+async function computeOverview(): Promise<OverviewData> {
   await connectDB()
   const [summaryDoc, dailyDocs, runDocs, openPositionsCount, positionDocs] =
     await Promise.all([
@@ -69,6 +75,13 @@ export async function getOverview(): Promise<OverviewData> {
     positions: sortPositionsForDisplay(positions),
   }
 }
+
+// 60s keeps intraday position marks reasonably live while collapsing repeat
+// visits (and the parallel /api/scanner/overview poll-free fetch) onto one
+// computation.
+export const getOverview = unstable_cache(computeOverview, ['scanner-overview'], {
+  revalidate: 60,
+})
 
 // OPEN/PENDING first (most recent entry/signal first), then closed/skipped by
 // most recent signal date — mirrors the listPositions ordering.
@@ -403,7 +416,7 @@ function buildIntradayDaily(runs: Raw[], capital: number): IntradayDailyPoint[] 
   return points
 }
 
-export async function getIntradayOverview(): Promise<IntradayOverview> {
+async function computeIntradayOverview(): Promise<IntradayOverview> {
   await connectDB()
   const [summaryDoc, runDocs, tradeDocs, allRunDocs] = await Promise.all([
     ScannerIntradayStatsModel.findById('summary').lean<Raw>().exec(),
@@ -427,6 +440,15 @@ export async function getIntradayOverview(): Promise<IntradayOverview> {
     daily: summary ? buildIntradayDaily(allRunDocs ?? [], summary.capital) : [],
   }
 }
+
+// The tab's landing aggregates (recent runs/trades, equity curve). The live
+// "Right now" section reads getIntradayLive() separately and stays uncached, so
+// a short window here only staggers the historical rollup, not live status.
+export const getIntradayOverview = unstable_cache(
+  computeIntradayOverview,
+  ['scanner-intraday-overview'],
+  { revalidate: 30 },
+)
 
 // Latest live-session doc (the Python live runner upserts _id = session date).
 // Used server-side to seed the tab's "Right now" section, and by the polled

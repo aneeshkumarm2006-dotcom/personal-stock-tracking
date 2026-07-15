@@ -106,8 +106,9 @@ export function TransactionHistoryTable() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['holdings'] }),
         queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['portfolioSummary'] }),
       ])
-      // The portfolio summary cards are server-rendered; re-render them too.
+      // Keep any remaining server-rendered bits (e.g. realized-P&L section) fresh.
       router.refresh()
     },
     onError: (err: Error) => toast.error(err.message),

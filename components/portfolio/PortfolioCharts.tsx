@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import dynamic from 'next/dynamic'
 import { useQuery } from '@tanstack/react-query'
 
 import {
@@ -12,24 +13,45 @@ import {
 } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  AllocationByInstrumentPie,
-  type AllocationByInstrumentDatum,
-} from '@/components/charts/AllocationByInstrumentPie'
-import {
-  AllocationBySectorPie,
-  type AllocationBySectorDatum,
-} from '@/components/charts/AllocationBySectorPie'
-import {
-  InstrumentPnLBar,
-  type InstrumentPnLDatum,
-} from '@/components/charts/InstrumentPnLBar'
-import {
-  WealthHistoryChart,
-  type WealthHistoryDatum,
-} from '@/components/charts/WealthHistoryChart'
+import type { AllocationByInstrumentDatum } from '@/components/charts/AllocationByInstrumentPie'
+import type { AllocationBySectorDatum } from '@/components/charts/AllocationBySectorPie'
+import type { InstrumentPnLDatum } from '@/components/charts/InstrumentPnLBar'
+import type { WealthHistoryDatum } from '@/components/charts/WealthHistoryChart'
 import { sectorForSymbol } from '@/lib/portfolio/sectors'
 import type { EnrichedHolding } from '@/lib/portfolio/summary'
+
+// Recharts is heavy, and these charts are below the fold. Loading them with
+// next/dynamic({ ssr: false }) keeps the chart bundle out of this route's
+// critical path — the page hydrates and becomes interactive first, then the
+// chart chunk streams in behind a same-height skeleton.
+const chartFallback = () => <Skeleton className="h-[280px] w-full" />
+
+const AllocationByInstrumentPie = dynamic(
+  () =>
+    import('@/components/charts/AllocationByInstrumentPie').then(
+      (m) => m.AllocationByInstrumentPie,
+    ),
+  { ssr: false, loading: chartFallback },
+)
+const AllocationBySectorPie = dynamic(
+  () =>
+    import('@/components/charts/AllocationBySectorPie').then(
+      (m) => m.AllocationBySectorPie,
+    ),
+  { ssr: false, loading: chartFallback },
+)
+const InstrumentPnLBar = dynamic(
+  () =>
+    import('@/components/charts/InstrumentPnLBar').then((m) => m.InstrumentPnLBar),
+  { ssr: false, loading: chartFallback },
+)
+const WealthHistoryChart = dynamic(
+  () =>
+    import('@/components/charts/WealthHistoryChart').then(
+      (m) => m.WealthHistoryChart,
+    ),
+  { ssr: false, loading: chartFallback },
+)
 
 type HoldingsResponse = {
   holdings: EnrichedHolding[]
@@ -58,11 +80,22 @@ async function fetchHistory(): Promise<HistorySnapshot[]> {
   return Array.isArray(data) ? data : []
 }
 
-export function PortfolioCharts() {
-  const holdingsQuery = useQuery({ queryKey: ['holdings'], queryFn: fetchHoldings })
+export function PortfolioCharts({
+  initialHoldings,
+}: {
+  initialHoldings?: HoldingsResponse
+}) {
+  const holdingsQuery = useQuery({
+    queryKey: ['holdings'],
+    queryFn: fetchHoldings,
+    initialData: initialHoldings,
+  })
   const historyQuery = useQuery({
     queryKey: ['portfolio-history', 'all'],
     queryFn: fetchHistory,
+    // The wealth history only changes once a day (the post-close snapshot cron),
+    // so hold it fresh for the session instead of refetching it repeatedly.
+    staleTime: Infinity,
   })
 
   const allocationByInstrument: AllocationByInstrumentDatum[] = useMemo(() => {

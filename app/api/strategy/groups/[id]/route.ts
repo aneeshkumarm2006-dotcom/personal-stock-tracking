@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { isValidObjectId } from 'mongoose'
 import { z } from 'zod'
 
@@ -12,14 +12,16 @@ import { normalizeSymbol, sectorForSymbol } from '@/lib/portfolio/sectors'
 import { resolveSectorLive, sectorsForSymbols } from '@/lib/strategy/sector'
 
 // How many not-yet-cached symbols to resolve from the rate-limited provider per
-// request, and how long to wait before returning without them. Anything left
-// unresolved shows 'Other' and is retried on the next 30s refetch; in-flight
-// fetches keep running and populate the cache for next time (self-healing).
+// request. Anything left unresolved shows 'Other' until the cache is populated.
 const SECTOR_FETCH_CAP = 5
-const SECTOR_FETCH_BUDGET_MS = 3000
 
-// Resolve sectors for entries the offline maps don't cover: read the persistent
-// cache, then fetch a capped number of genuine misses within a time budget.
+// Resolve sectors for entries the offline maps don't cover. This endpoint is
+// polled every 15-30s for live prices, so the response must NOT block on the
+// rate-limited fundamentals provider (that stall used to make every strategy
+// refresh sluggish). Read the persistent cache synchronously and return it;
+// schedule the live resolution of genuine misses via after() so it runs once
+// the response is sent. Resolved values are upserted into SectorCache and picked
+// up on the next poll — self-healing, but off the hot path.
 async function resolveSectors(
   entries: Pick<EntryForStats, 'instrumentSymbol'>[],
 ): Promise<Map<string, string>> {
@@ -35,24 +37,14 @@ async function resolveSectors(
   const toFetch = unknown
     .filter((s) => !cacheMap.has(normalizeSymbol(s)))
     .slice(0, SECTOR_FETCH_CAP)
-  if (toFetch.length === 0) return cacheMap
-
-  const settled = await Promise.race([
-    Promise.allSettled(
-      toFetch.map(async (s) => ({
-        key: normalizeSymbol(s),
-        sector: await resolveSectorLive(s),
-      })),
-    ),
-    new Promise<null>((res) => setTimeout(() => res(null), SECTOR_FETCH_BUDGET_MS)),
-  ])
-  if (settled) {
-    for (const r of settled) {
-      if (r.status === 'fulfilled' && r.value.sector !== 'Other') {
-        cacheMap.set(r.value.key, r.value.sector)
-      }
-    }
+  if (toFetch.length > 0) {
+    after(async () => {
+      // resolveSectorLive is best-effort (swallows provider errors) and upserts
+      // successes into SectorCache; allSettled so one miss never blocks another.
+      await Promise.allSettled(toFetch.map((s) => resolveSectorLive(s)))
+    })
   }
+
   return cacheMap
 }
 

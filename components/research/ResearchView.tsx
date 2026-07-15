@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { useQuery } from '@tanstack/react-query'
 import { LineChartIcon } from 'lucide-react'
 
@@ -18,11 +19,21 @@ import { FundamentalsSection } from './fundamentals/FundamentalsSection'
 import { MarketDepthCard } from './MarketDepthCard'
 import { QuoteHeader } from './QuoteHeader'
 import { QuoteStats } from './QuoteStats'
-import { ResearchPriceChart } from './ResearchPriceChart'
 import { ResearchSearch } from './ResearchSearch'
 import { TechnicalRatingCard } from './TechnicalRatingCard'
 import { TechnicalsCard } from './TechnicalsCard'
 import type { CandleRow, Quote, SelectedInstrument } from './types'
+
+// Defer the Recharts candle chart off the route's critical path (see PortfolioCharts).
+const ResearchPriceChart = dynamic(
+  () => import('./ResearchPriceChart').then((m) => m.ResearchPriceChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="bg-muted h-[360px] w-full animate-pulse rounded-lg" />
+    ),
+  },
+)
 
 // How often to repull the live quote while the market is open. Matches the other
 // live surfaces and stays well under Angel One's quote budget (10 req/sec).
