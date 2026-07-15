@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { formatCurrency, formatIstDate, formatPercent } from '@/lib/format'
+import { formatCurrency, formatIstDate } from '@/lib/format'
 import { istTodayKey, previousTradingDay } from '@/lib/scanner/freshness'
 import { SectionHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/badge'
@@ -14,23 +14,16 @@ import {
 } from '@/components/ui/table'
 import { IntradayStatCards } from '@/components/scanner/IntradayStatCards'
 import { IntradayEquityChart } from '@/components/scanner/IntradayEquityChart'
-import { IntradayToday } from '@/components/scanner/IntradayToday'
-import {
-  SectorRankingTable,
-  CandidateFunnel,
-} from '@/components/scanner/IntradaySessionDetail'
 import type {
-  IntradayLiveDoc,
   IntradayOverview,
   IntradayRun,
   IntradayTrade,
 } from '@/lib/scanner/types'
 
-// ── Intraday tab — mirrors the Swing tab's section rhythm (Prem, 2026-07-15):
-// Right now → stat cards → equity curve → by exit → last session → every pick →
-// session history. No theory blocks anywhere; sessions not yet replayed are
-// still LOGGED in the history grid as "pending" cards instead of silently
-// missing (the 4 AM run publishes the previous session's official record).
+// ── Intraday tab — same section rhythm and look as the Swing tab (Prem,
+// 2026-07-16): stat cards → equity curve → by exit → every pick → session
+// history. No status strip, live banner or replay block — the tab is a plain
+// mirror of Swing.
 
 function pnlCls(v: number | null | undefined) {
   if (v == null || v === 0) return 'text-muted-foreground'
@@ -113,137 +106,6 @@ function ByExitTable({
   )
 }
 
-// ── latest completed session, in full ───────────────────────────────────────
-function LevelChip({
-  label,
-  value,
-  cls,
-}: {
-  label: string
-  value: string
-  cls?: string
-}) {
-  return (
-    <div className="bg-muted/40 rounded-lg px-3 py-2">
-      <p className="text-muted-foreground text-[11px]">{label}</p>
-      <p className={cn('font-medium tabular-nums', cls)}>{value}</p>
-    </div>
-  )
-}
-
-function Tranches({ trade }: { trade: IntradayTrade }) {
-  const trs = trade.tranches ?? []
-  if (trs.length === 0) return null
-  return (
-    <span className="text-muted-foreground text-xs">
-      {trs
-        .map((t) => `${t.reason} ${t.qty}@${formatCurrency(t.price)} ${t.time}`)
-        .join(' · ')}
-    </span>
-  )
-}
-
-function PickDetail({ armRows }: { armRows: IntradayTrade[] }) {
-  const base = armRows[0]
-  if (!base) return null
-  const long = base.direction === 'long'
-  const arms = ['A', 'B']
-    .map((k) => armRows.find((r) => r.arm === k))
-    .filter(Boolean) as IntradayTrade[]
-
-  return (
-    <div className="bg-card ring-foreground/10 space-y-3 rounded-xl p-4 ring-1">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="text-base font-semibold">{base.symbol}</span>
-        <Badge
-          className={cn(
-            'border-transparent',
-            long ? 'bg-gain/10 text-gain' : 'bg-loss/10 text-loss',
-          )}
-        >
-          {base.direction}
-        </Badge>
-        {base.pct925 != null && (
-          <span className={cn('text-xs tabular-nums', pnlCls(base.pct925))}>
-            {formatPercent(base.pct925)} @ 9:25
-          </span>
-        )}
-        {base.entryTime && (
-          <span className="text-muted-foreground text-xs tabular-nums">
-            entered {base.entryTime}
-          </span>
-        )}
-      </div>
-
-      <div className="grid grid-cols-3 gap-2 text-sm">
-        <LevelChip
-          label="Entry"
-          value={base.entry != null ? formatCurrency(base.entry) : '—'}
-        />
-        <LevelChip
-          label="Stop"
-          value={base.stop != null ? formatCurrency(base.stop) : '—'}
-          cls="text-loss"
-        />
-        <LevelChip
-          label="Shares"
-          value={base.qty != null ? String(base.qty) : '—'}
-        />
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-2">
-        {arms.map((a) => (
-          <div key={a.id} className="bg-muted/40 rounded-lg px-3 py-2 text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium">
-                Exit {a.arm}{' '}
-                <span className="text-muted-foreground text-xs">
-                  {a.arm === 'A' ? '1.5× risk' : '2× risk'} · target{' '}
-                  {a.target != null ? formatCurrency(a.target) : '—'}
-                </span>
-              </span>
-              <Badge
-                className={cn(
-                  'border-transparent text-[10px]',
-                  a.exitReason === 'TP'
-                    ? 'bg-gain/10 text-gain'
-                    : a.exitReason === 'SL'
-                      ? 'bg-loss/10 text-loss'
-                      : 'bg-secondary text-secondary-foreground',
-                )}
-              >
-                {a.exitReason === 'TP'
-                  ? 'target hit'
-                  : a.exitReason === 'SL'
-                    ? 'stopped out'
-                    : (a.exitReason ?? '—')}
-              </Badge>
-            </div>
-            <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3">
-              <Tranches trade={a} />
-              <span
-                className={cn('font-medium tabular-nums', pnlCls(a.netPnl))}
-              >
-                {a.netPnl != null ? formatCurrency(a.netPnl) : '—'}
-                {a.rMultiple != null && (
-                  <span className="text-muted-foreground">
-                    {' '}
-                    · {a.rMultiple}R
-                  </span>
-                )}
-              </span>
-            </div>
-            <div className="text-muted-foreground mt-1 flex justify-between text-[11px] tabular-nums">
-              <span>gross {formatCurrency(a.grossPnl)}</span>
-              <span>costs {formatCurrency(a.costs)}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function runStatusBadge(status: string) {
   const cls =
     status === 'ok'
@@ -254,120 +116,6 @@ function runStatusBadge(status: string) {
   const label =
     status === 'ok' ? 'traded' : status === 'failed' ? 'failed' : 'no trade'
   return <Badge className={cn('border-transparent', cls)}>{label}</Badge>
-}
-
-function LatestReplay({
-  run,
-  trades,
-}: {
-  run: IntradayRun
-  trades: IntradayTrade[]
-}) {
-  const dayTraded = trades.filter(
-    (t) => t.date === run.date && t.status === 'TRADED',
-  )
-  // Group this day's arm rows by symbol so both exits sit under one pick.
-  const bySymbol = new Map<string, IntradayTrade[]>()
-  for (const t of dayTraded) {
-    const arr = bySymbol.get(t.symbol) ?? []
-    arr.push(t)
-    bySymbol.set(t.symbol, arr)
-  }
-  const hasRanking = (run.sectorTable?.length ?? 0) > 0
-  const hasFunnel = (run.picks?.length ?? 0) + (run.rejects?.length ?? 0) > 0
-  const chosenName =
-    run.sectorTable?.find((r) => r.key === run.sector)?.name ??
-    run.sector ??
-    null
-
-  return (
-    <div className="bg-card ring-foreground/10 space-y-4 rounded-xl p-5 ring-1 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h3 className="text-base font-semibold">{formatIstDate(run.date)}</h3>
-          {runStatusBadge(run.status)}
-        </div>
-        <div className="flex items-center gap-3 text-sm tabular-nums">
-          <span className={pnlCls(run.dayPnlA)}>
-            A {formatCurrency(run.dayPnlA ?? 0)}
-          </span>
-          <span className={pnlCls(run.dayPnlB)}>
-            B {formatCurrency(run.dayPnlB ?? 0)}
-          </span>
-        </div>
-      </div>
-
-      {run.status !== 'ok' && (
-        <p className="text-muted-foreground text-sm">
-          No trade —{' '}
-          <span className="text-foreground">
-            {run.noTradeReason ?? 'stood down'}
-          </span>
-        </p>
-      )}
-
-      {bySymbol.size > 0 && (
-        <div className="space-y-3">
-          {[...bySymbol.entries()].map(([symbol, armRows]) => (
-            <PickDetail key={symbol} armRows={armRows} />
-          ))}
-        </div>
-      )}
-
-      {(hasRanking || hasFunnel) && (
-        <details className="group border-t pt-3">
-          <summary className="text-muted-foreground hover:text-foreground cursor-pointer list-none text-xs font-medium">
-            <span className="group-open:hidden">▸ </span>
-            <span className="hidden group-open:inline">▾ </span>
-            Why this pick — how the morning ranked
-          </summary>
-          <div className="mt-4 grid gap-5 lg:grid-cols-2">
-            {hasRanking && (
-              <div className="space-y-2">
-                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                  Sector ranking · 9:20 → 9:25
-                </p>
-                <SectorRankingTable
-                  sectorTable={run.sectorTable!}
-                  chosenKey={run.sector}
-                  direction={run.direction}
-                />
-              </div>
-            )}
-            {hasFunnel && (
-              <div className="space-y-2">
-                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                  Candidate funnel
-                </p>
-                <CandidateFunnel
-                  sectorName={chosenName}
-                  direction={run.direction}
-                  picks={run.picks ?? []}
-                  rejects={run.rejects ?? []}
-                />
-              </div>
-            )}
-          </div>
-        </details>
-      )}
-
-      {run.warnings && run.warnings.length > 0 && (
-        <details className="border-t pt-3">
-          <summary className="text-muted-foreground cursor-pointer text-xs font-medium">
-            Data warnings ({run.warnings.length})
-          </summary>
-          <ul className="text-muted-foreground mt-2 space-y-1 text-xs">
-            {run.warnings.map((w, i) => (
-              <li key={i} className="flex gap-1.5">
-                <span aria-hidden>⚠</span>
-                <span>{w}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </div>
-  )
 }
 
 // ── every pick — one row per trade, both exits side by side ─────────────────
@@ -571,13 +319,7 @@ function RecentSessions({
   )
 }
 
-export function IntradayTab({
-  data,
-  initialLive,
-}: {
-  data?: IntradayOverview | null
-  initialLive: IntradayLiveDoc | null
-}) {
+export function IntradayTab({ data }: { data?: IntradayOverview | null }) {
   const summary = data?.summary ?? null
   const recentRuns = data?.recentRuns ?? []
   const recentTrades = data?.recentTrades ?? []
@@ -587,17 +329,17 @@ export function IntradayTab({
   const hasResults =
     recentRuns.length > 0 || (summary?.byArm.A.trades ?? 0) > 0
 
+  if (!summary && !hasResults) {
+    return (
+      <EmptyState
+        title="No sessions recorded yet"
+        description="Once the intraday engine publishes its first session, your stat cards, equity curve and picks will appear here."
+      />
+    )
+  }
+
   return (
     <div className="space-y-8">
-      <IntradayToday initialLive={initialLive} latestRun={latest} />
-
-      {!hasResults && (
-        <EmptyState
-          title="No sessions recorded yet"
-          description="Results appear after the first completed session."
-        />
-      )}
-
       {summary && <IntradayStatCards summary={summary} />}
 
       {summary && (
@@ -623,16 +365,6 @@ export function IntradayTab({
         <section className="space-y-3">
           <SectionHeader title="By exit" hint="Closed trade stats per exit" />
           <ByExitTable summary={summary} />
-        </section>
-      )}
-
-      {latest && (
-        <section className="space-y-3">
-          <SectionHeader
-            title="Last completed session"
-            hint="The evening replay is the official record"
-          />
-          <LatestReplay run={latest} trades={recentTrades} />
         </section>
       )}
 
