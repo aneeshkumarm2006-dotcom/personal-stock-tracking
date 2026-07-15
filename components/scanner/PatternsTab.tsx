@@ -1,7 +1,6 @@
 import Link from 'next/link'
 
 import {
-  formatCurrency,
   formatInt,
   formatIstDate,
   formatIstTime,
@@ -26,10 +25,10 @@ import type {
   PatternHealth,
 } from '@/lib/scanner/types'
 
-// ── Patterns tab — status-first, decision-first (Prem's 2026-07-14 redesign).
-// Order: Right now (did the engine run + what it found) → latest detections →
-// which patterns make money → earlier days. All theory sits in one small
-// collapsed block at the bottom.
+// ── Patterns tab — mirrors the Swing tab's section rhythm (Prem, 2026-07-15):
+// Right now → stat cards → equity curve → scoreboard → latest detections →
+// trade levels → earlier days. No theory blocks anywhere; the status strip is
+// the log of whether the 4 AM run has published yet.
 
 function RecentDaysStrip({ days }: { days: PatternDayCount[] }) {
   if (days.length === 0) return null
@@ -127,78 +126,6 @@ function buildStatusItems(health: PatternHealth): StatusItem[] {
   return [engine, found, progress]
 }
 
-// ── the ONLY theory on the tab — one compact collapsed block at the bottom ───
-function PatternsHowItWorks() {
-  const terms: { term: string; def: string }[] = [
-    {
-      term: 'Chart pattern',
-      def: 'A recognisable shape in the price chart — a cup, a double bottom, a flag — that traders read as a clue to the next move.',
-    },
-    {
-      term: 'Quality',
-      def: 'How cleanly the shape formed, 0–100. Higher = closer to the textbook example.',
-    },
-    {
-      term: 'Buy above · Stop · Target',
-      def: 'The plan for each find: enter if price crosses Buy, bail at the Stop if wrong, book at the Target if right.',
-    },
-    {
-      term: 'R:R',
-      def: 'Reward-to-risk. 1.9 means the target is worth about 1.9× what the trade risks.',
-    },
-    {
-      term: 'Strong bet / Long shot',
-      def: 'Our expectation going in. Strong bets are the researched setups; long shots are tracked mainly to prove whether they work at all.',
-    },
-    {
-      term: 'Tradable',
-      def: 'Untradable names (illiquid, or under NSE surveillance / trade-to-trade rules) are still detected but scored separately — you couldn’t cleanly trade them.',
-    },
-    {
-      term: 'Result',
-      def: 'What the paper trade did — waiting to enter, live, or finished at its target or stop.',
-    },
-  ]
-  return (
-    <details className="bg-card ring-foreground/10 group rounded-xl ring-1">
-      <summary className="flex cursor-pointer items-center justify-between gap-3 p-4 sm:p-5">
-        <h3 className="text-sm font-semibold">
-          How this test works — rules &amp; key terms
-        </h3>
-        <span className="text-muted-foreground shrink-0 text-xs">
-          <span className="group-open:hidden">show ▾</span>
-          <span className="hidden group-open:inline">hide ▴</span>
-        </span>
-      </summary>
-      <div className="space-y-5 border-t p-4 sm:p-5">
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Every trading morning, 15 detectors scan about 2,700 NSE stocks for
-          classic chart shapes. Each find becomes a paper (pretend-money) trade
-          at the shown levels and is tracked to its target or stop. Over weeks,
-          the scoreboard settles the real question: which chart patterns
-          actually make money on the NSE after costs — and which are folklore.
-          No real money is at risk.
-        </p>
-        <div className="border-t pt-4">
-          <p className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
-            Key terms
-          </p>
-          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-            {terms.map((t) => (
-              <div key={t.term} className="flex gap-2 text-sm">
-                <dt className="text-foreground shrink-0 font-medium">
-                  {t.term}
-                </dt>
-                <dd className="text-muted-foreground">{t.def}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </div>
-    </details>
-  )
-}
-
 export function PatternsTab({
   data,
   health,
@@ -227,47 +154,13 @@ export function PatternsTab({
         <StatusStrip items={statusItems} />
       </section>
 
-      <section className="space-y-3">
-        <SectionHeader
-          title="Latest detections"
-          hint={
-            latestDay ? `session of ${formatIstDate(latestDay.date)}` : undefined
-          }
-        />
-        {latestDay && latestDay.detections.length > 0 ? (
-          <>
-            <p className="text-muted-foreground text-sm">
-              {formatInt(latestDay.total)} pattern
-              {latestDay.total === 1 ? '' : 's'} found ·{' '}
-              {formatInt(latestDay.tradable)} tradable. Each one is
-              paper-traded at the shown levels — the Result column tracks what
-              happened.
-            </p>
-            <PatternDetectionsTable detections={latestDay.detections} />
-          </>
-        ) : (
-          <EmptyState
-            title="Nothing found yet"
-            description="Each trading morning the engine scans ~2,700 NSE stocks for chart patterns. Finds land here with their buy / stop / target plan — days with zero finds are normal."
-          />
-        )}
-      </section>
-
-      {summary && (
-        <section className="space-y-3">
-          <SectionHeader
-            title="Is it making money?"
-            hint={`all patterns pooled, tradable names only — on ${formatCurrency(summary.capital)} of pretend capital`}
-          />
-          <PatternStatCards summary={summary} />
-        </section>
-      )}
+      {summary && <PatternStatCards summary={summary} />}
 
       {summary && (
         <section className="space-y-3">
           <SectionHeader
             title="Equity curve"
-            hint="realized paper equity and max drawdown — moves as trades close"
+            hint="Realized paper equity and max drawdown by day"
           />
           {daily.length > 0 ? (
             <div className="bg-card ring-foreground/10 rounded-xl p-4 ring-1">
@@ -285,15 +178,32 @@ export function PatternsTab({
       <section className="space-y-3">
         <SectionHeader
           title="Which patterns make money"
-          hint="the running verdict — settles as paper trades close"
+          hint="The running verdict per pattern — settles as trades close"
         />
         <PatternScoreboard summary={summary} />
       </section>
 
       <section className="space-y-3">
         <SectionHeader
+          title="Latest detections"
+          hint={
+            latestDay ? `Session of ${formatIstDate(latestDay.date)}` : undefined
+          }
+        />
+        {latestDay && latestDay.detections.length > 0 ? (
+          <PatternDetectionsTable detections={latestDay.detections} />
+        ) : (
+          <EmptyState
+            title="No detections yet"
+            description="Days with zero finds are normal — the next scan publishes at the 4 AM run."
+          />
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <SectionHeader
           title="Trade levels"
-          hint="entry, stop, targets and P&L per paper trade"
+          hint="Entry, stop, targets and P&L per paper trade"
         />
         <ScannerLevelsTable positions={positions} />
       </section>
@@ -302,14 +212,12 @@ export function PatternsTab({
         <section className="space-y-3">
           <SectionHeader
             title="Earlier days"
-            hint="open any day for its full list"
+            hint="Open any day for its full list"
           />
           {/* recentDays[0] is the latest day, already shown in full above. */}
           <RecentDaysStrip days={recentDays.slice(1)} />
         </section>
       ) : null}
-
-      <PatternsHowItWorks />
     </div>
   )
 }

@@ -1,7 +1,6 @@
-import type { ReactNode } from 'react'
-
 import { cn } from '@/lib/utils'
 import { formatCurrency, formatIstDate, formatPercent } from '@/lib/format'
+import { istTodayKey, previousTradingDay } from '@/lib/scanner/freshness'
 import { SectionHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -27,10 +26,11 @@ import type {
   IntradayTrade,
 } from '@/lib/scanner/types'
 
-// ── Intraday tab — status-first, decision-first (Prem's 2026-07-14 redesign).
-// Order: Right now (is it running + today's decision) → is it making money →
-// last completed session → every pick → history. ALL theory lives in one small
-// collapsed block at the bottom; the long research essay is gone.
+// ── Intraday tab — mirrors the Swing tab's section rhythm (Prem, 2026-07-15):
+// Right now → stat cards → equity curve → by exit → last session → every pick →
+// session history. No theory blocks anywhere; sessions not yet replayed are
+// still LOGGED in the history grid as "pending" cards instead of silently
+// missing (the 4 AM run publishes the previous session's official record).
 
 function pnlCls(v: number | null | undefined) {
   if (v == null || v === 0) return 'text-muted-foreground'
@@ -44,16 +44,8 @@ function ByExitTable({
   summary: NonNullable<IntradayOverview['summary']>
 }) {
   const rows = [
-    {
-      key: 'A',
-      blurb: 'books profit at 1.5× the risk — safer, wins more often',
-      stats: summary.byArm.A,
-    },
-    {
-      key: 'B',
-      blurb: 'holds out for 2× the risk — greedier, bigger wins',
-      stats: summary.byArm.B,
-    },
+    { key: 'A', blurb: '1.5× risk target', stats: summary.byArm.A },
+    { key: 'B', blurb: '2× risk target', stats: summary.byArm.B },
   ]
   const diff = summary.byArm.B.netPnl - summary.byArm.A.netPnl
   const traded = Math.max(summary.byArm.A.trades, summary.byArm.B.trades) > 0
@@ -118,43 +110,6 @@ function ByExitTable({
         </TableBody>
       </Table>
     </div>
-  )
-}
-
-// One-line, plain-language read on which exit is winning and whether to trust it.
-function ArmVerdict({
-  summary,
-}: {
-  summary: NonNullable<IntradayOverview['summary']>
-}) {
-  const a = summary.byArm.A
-  const b = summary.byArm.B
-  const trades = Math.max(a.trades, b.trades)
-  if (trades === 0) return null
-  const diff = b.netPnl - a.netPnl
-  const leader = diff > 0 ? 'B' : diff < 0 ? 'A' : null
-  return (
-    <p className="text-muted-foreground text-sm">
-      {leader == null ? (
-        'Both exits are dead even so far.'
-      ) : (
-        <>
-          <span className="text-foreground font-medium">Exit {leader}</span> is
-          ahead by {formatCurrency(Math.abs(diff))} —{' '}
-          {leader === 'B'
-            ? 'holding for the bigger target'
-            : 'banking profit early'}{' '}
-          has paid off so far.
-        </>
-      )}
-      {trades < 10 && (
-        <>
-          {' '}
-          Only {trades} trade{trades === 1 ? '' : 's'} in, though — far too few
-          to trust yet.
-        </>
-      )}
-    </p>
   )
 }
 
@@ -348,7 +303,6 @@ function LatestReplay({
           <span className="text-foreground">
             {run.noTradeReason ?? 'stood down'}
           </span>
-          . The ranking and funnel below show exactly why.
         </p>
       )}
 
@@ -531,17 +485,57 @@ function PicksTable({ trades }: { trades: IntradayTrade[] }) {
 }
 
 // ── session history strip ───────────────────────────────────────────────────
-function RecentSessions({ runs }: { runs: IntradayRun[] }) {
-  if (runs.length === 0) {
+// Trading days newer than the last published replay, oldest-capped at 5. These
+// sessions HAPPENED (or were holidays — indistinguishable) but their official
+// record only lands at the next 4 AM run, so the grid logs them as pending
+// instead of leaving a hole that reads like a bug.
+function pendingSessionDates(lastPublished: string | null): string[] {
+  if (!lastPublished) return []
+  const out: string[] = []
+  let d = previousTradingDay(istTodayKey())
+  while (d > lastPublished && out.length < 5) {
+    out.push(d)
+    d = previousTradingDay(d)
+  }
+  return out
+}
+
+function PendingSessionCard({ date }: { date: string }) {
+  return (
+    <div className="ring-foreground/10 rounded-lg bg-amber-500/5 p-3 ring-1">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">{formatIstDate(date)}</span>
+        <Badge className="border-transparent bg-amber-500/10 text-amber-600 dark:text-amber-500">
+          pending
+        </Badge>
+      </div>
+      <p className="text-muted-foreground mt-1 text-xs">
+        Replay publishes at the next 4 AM run — or market holiday.
+      </p>
+    </div>
+  )
+}
+
+function RecentSessions({
+  runs,
+  pending,
+}: {
+  runs: IntradayRun[]
+  pending: string[]
+}) {
+  if (runs.length === 0 && pending.length === 0) {
     return (
       <EmptyState
         title="No sessions yet"
-        description="Each completed session is replayed in the evening and listed here."
+        description="Sessions are listed here once the first replay publishes."
       />
     )
   }
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {pending.map((date) => (
+        <PendingSessionCard key={date} date={date} />
+      ))}
       {runs.map((run) => {
         const chosen =
           run.sectorTable?.find((r) => r.key === run.sector)?.name ?? run.sector
@@ -577,137 +571,6 @@ function RecentSessions({ runs }: { runs: IntradayRun[] }) {
   )
 }
 
-// ── the ONLY theory on the tab — one compact collapsed block at the bottom ───
-function IntradayHowItWorks() {
-  const rules: { label: string; body: ReactNode }[] = [
-    {
-      label: 'The pick',
-      body: 'At 9:20 and again at 9:25, every NSE sector is ranked by % change. The strongest sector’s single top mover is the pick — long if it’s up, short if it’s down. One pick per day, maximum.',
-    },
-    {
-      label: 'The entry',
-      body: 'Enter when the price breaks the first 5-minute candle’s high (long) or low (short), and only on the matching side of VWAP. If price gaps through the level, skip — never chase.',
-    },
-    {
-      label: 'The two exits',
-      body: 'Stop-loss at the other end of that first candle. Every pick is run through two exits at once: Exit A books profit at 1.5× the risk, Exit B holds for 2×. Anything still open closes at 15:15. Comparing A vs B over many trades is the whole experiment.',
-    },
-    {
-      label: 'Auto-skip',
-      body: 'Doji first candle, wrong side of VWAP, stock on the F&O ban list or under NSE surveillance, or no trigger by 10:30 — any of these means a deliberate no-trade day.',
-    },
-  ]
-  const terms: { term: string; def: string }[] = [
-    {
-      term: 'Exit A / Exit B',
-      def: 'The same trade closed two ways — A banks profit at 1.5× the risk, B holds out for 2×.',
-    },
-    {
-      term: '9:25%',
-      def: 'How far the stock had moved by 9:25, the moment the pick is locked in.',
-    },
-    {
-      term: 'R',
-      def: 'One unit of risk (entry − stop). “+2R” means it made twice what it risked.',
-    },
-    {
-      term: 'RV',
-      def: 'Relative volume — the opening volume vs its 14-day norm. Recorded for research, never used to pick.',
-    },
-    {
-      term: 'Target / stop',
-      def: 'A trade ends at its profit target (a win) or its stop-loss (a loss).',
-    },
-  ]
-  const sources: { label: string; href: string }[] = [
-    {
-      label: 'Stocks in Play — 5-min ORB study',
-      href: 'https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4729284',
-    },
-    {
-      label: 'ORB on QQQ',
-      href: 'https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4416622',
-    },
-    {
-      label: 'VWAP as a momentum signal',
-      href: 'https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4631351',
-    },
-    {
-      label: 'Zerodha charges (cost model)',
-      href: 'https://zerodha.com/charges/',
-    },
-  ]
-
-  return (
-    <details className="bg-card ring-foreground/10 group rounded-xl ring-1">
-      <summary className="flex cursor-pointer items-center justify-between gap-3 p-4 sm:p-5">
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold">
-            How this test works — rules &amp; key terms
-          </h3>
-        </div>
-        <span className="text-muted-foreground shrink-0 text-xs">
-          <span className="group-open:hidden">show ▾</span>
-          <span className="hidden group-open:inline">hide ▴</span>
-        </span>
-      </summary>
-
-      <div className="space-y-5 border-t p-4 sm:p-5">
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          A paper (pretend-money) forward test on ₹5,00,000: one simple intraday
-          strategy from a trading video, run exactly as stated, every trading
-          day — to find out whether it actually makes money after real costs.
-          No real money is at risk.
-        </p>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          {rules.map((r) => (
-            <div key={r.label} className="space-y-1">
-              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                {r.label}
-              </p>
-              <p className="text-sm">{r.body}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="border-t pt-4">
-          <p className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
-            Key terms
-          </p>
-          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-            {terms.map((t) => (
-              <div key={t.term} className="flex gap-2 text-sm">
-                <dt className="text-foreground shrink-0 font-medium">
-                  {t.term}
-                </dt>
-                <dd className="text-muted-foreground">{t.def}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-
-        <p className="text-muted-foreground border-t pt-3 text-xs">
-          Research behind the setup:{' '}
-          {sources.map((s, i) => (
-            <span key={s.href}>
-              {i > 0 && ' · '}
-              <a
-                href={s.href}
-                target="_blank"
-                rel="noreferrer"
-                className="hover:text-foreground underline underline-offset-2"
-              >
-                {s.label}
-              </a>
-            </span>
-          ))}
-        </p>
-      </div>
-    </details>
-  )
-}
-
 export function IntradayTab({
   data,
   initialLive,
@@ -720,6 +583,7 @@ export function IntradayTab({
   const recentTrades = data?.recentTrades ?? []
   const daily = data?.daily ?? []
   const latest = recentRuns[0] ?? null
+  const pending = pendingSessionDates(latest?.date ?? null)
   const hasResults =
     recentRuns.length > 0 || (summary?.byArm.A.trades ?? 0) > 0
 
@@ -730,26 +594,17 @@ export function IntradayTab({
       {!hasResults && (
         <EmptyState
           title="No sessions recorded yet"
-          description="Each completed trading day is replayed in the evening; the results land here. One pick per day, paper-traded with two exits at once."
+          description="Results appear after the first completed session."
         />
       )}
 
-      {summary && (
-        <section className="space-y-3">
-          <SectionHeader
-            title="Is it making money?"
-            hint={`running total on ${formatCurrency(summary.capital)} of pretend capital`}
-          />
-          <ArmVerdict summary={summary} />
-          <IntradayStatCards summary={summary} />
-        </section>
-      )}
+      {summary && <IntradayStatCards summary={summary} />}
 
       {summary && (
         <section className="space-y-3">
           <SectionHeader
             title="Equity curve"
-            hint="both exits by session — the gap between the lines is the A/B verdict"
+            hint="Running equity per exit by session"
           />
           {daily.length > 0 ? (
             <div className="bg-card ring-foreground/10 rounded-xl p-4 ring-1">
@@ -766,10 +621,7 @@ export function IntradayTab({
 
       {summary && (
         <section className="space-y-3">
-          <SectionHeader
-            title="By exit"
-            hint="the same trades closed two ways — stats per exit"
-          />
+          <SectionHeader title="By exit" hint="Closed trade stats per exit" />
           <ByExitTable summary={summary} />
         </section>
       )}
@@ -778,7 +630,7 @@ export function IntradayTab({
         <section className="space-y-3">
           <SectionHeader
             title="Last completed session"
-            hint="the evening replay is the official record"
+            hint="The evening replay is the official record"
           />
           <LatestReplay run={latest} trades={recentTrades} />
         </section>
@@ -789,7 +641,7 @@ export function IntradayTab({
           <section className="space-y-3">
             <SectionHeader
               title="Every pick"
-              hint="one row per trade — both exits side by side"
+              hint="One row per trade — both exits side by side"
             />
             <PicksTable trades={recentTrades} />
           </section>
@@ -797,14 +649,12 @@ export function IntradayTab({
           <section className="space-y-3">
             <SectionHeader
               title="Session history"
-              hint="every morning the engine ran — including no-trade days"
+              hint="Every session — traded, no-trade and pending"
             />
-            <RecentSessions runs={recentRuns} />
+            <RecentSessions runs={recentRuns} pending={pending} />
           </section>
         </>
       )}
-
-      <IntradayHowItWorks />
     </div>
   )
 }
